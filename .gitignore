@@ -1,0 +1,10 @@
+.env
+.idea
+.vscode
+nginx/sites/**
+# nginx/certs/**
+nginx/certs/.gitkeep
+db/*.sql
+!nginx/sites/.gitkeep
+web-hosts.json
+build.log

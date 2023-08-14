@@ -1,0 +1,129 @@
+version: "3.3"
+
+volumes:
+    ssl:
+    livereload:
+    db:
+    phpmyadmin:
+
+
+networks:
+    nginx:
+
+
+services:
+    app:
+        image: app
+        build:
+            context: ./app
+            args:
+                NVM_NODEJS_ORG_MIRROR: ${NVM_NODEJS_ORG_MIRROR}
+                WORKDIR: ${WORKDIR}
+                FISH: ${FISH}
+                OHMYFISH: ${OHMYFISH}
+                OHMYBASH: ${OHMYBASH}
+                LIVERELOAD: ${LIVERELOAD}
+                FZF: ${FZF}
+                FDFIND: ${FDFIND}
+                NVIM: ${NVIM}
+                NODE: ${NODE}
+                NODE_VERSION: ${NODE_VERSION}
+        restart: always
+        working_dir: ${WORKDIR}
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
+        dns:
+            - 8.8.8.8
+        volumes:
+            - ${MAPDIR}:${WORKDIR}
+            - $HOME/.ssh:/home/${APP_USER}/.ssh
+            - $HOME/.cache/composer:/composer/cache
+        environment:
+            NVM_NODEJS_ORG_MIRROR: ${NVM_NODEJS_ORG_MIRROR}
+            APP_ENV: ${APP_ENV}
+            APP_USER: ${APP_USER}
+            APP_DEBUG: ${APP_DEBUG}
+            XDEBUG_MODE: ${XDEBUG_MODE}
+            XDEBUG_HOST: ${XDEBUG_HOST}
+            XDEBUG_IDEKEY: ${XDEBUG_IDEKEY}
+            LIVERELOAD: ${LIVERELOAD}
+            WORKDIR: ${WORKDIR}
+        ports:
+            - 35729:35729
+            - 25:25
+        networks:
+            - nginx
+        command: sudo -u root php-fpm
+        # command: tail -f /dev/null
+
+
+    nginx:
+        image: nginx:stable-alpine3.17
+        depends_on:
+            - app
+            - mariadb
+            - redis
+        build:
+            context: nginx
+            args:
+                - WORKDIR=${WORKDIR}
+        restart: always
+        volumes:
+            - ${MAPDIR}:${WORKDIR}
+            - ./nginx/sites:/etc/nginx/sites-available
+            - ssl:/etc/letsencrypt
+            - livereload:/var/www/livereload
+            - phpmyadmin:/var/www/html
+        environment:
+            - WORKDIR=${WORKDIR}
+        ports:
+            - 80:80
+            - 443:443
+        networks:
+            nginx:
+                aliases:
+                    - db.3oak.test
+        # command: tail -f /dev/null
+
+
+    mariadb:
+        image: mariadb:lts
+        restart: always
+        environment:
+            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+        volumes:
+            - db:/var/lib/mysql
+        networks:
+            - nginx
+        ports:
+            - 3306:3306
+
+    redis:
+        build: ./redis
+        restart: always
+        networks:
+            - nginx
+        ports:
+            - 6379:6379
+
+    phpmyadmin:
+        image: phpmyadmin/phpmyadmin:fpm-alpine
+        volumes:
+            - phpmyadmin:/var/www/html
+        restart: always
+        environment:
+            PMA_HOST: ${DB_HOST}
+            PMA_USER: "root"
+            PMA_PASSWORD: "secret"
+            UPLOAD_LIMIT: 10048M
+        networks:
+            - nginx
+
+    mailhog:
+        image: mailhog/mailhog
+        restart: always
+        ports:
+            - 1025:1025
+            - 8025:8025
+        networks:
+            - nginx
