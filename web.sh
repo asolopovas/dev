@@ -260,6 +260,7 @@ function gen_root_ssl() {
     openssl req -x509 -new -nodes -passin pass:default -key "$CERTS_DIR/$FILENAME.key" -sha256 -days 20480 -subj "/C=GB/ST=London/L=London/O=Lyntouch/OU=IT Department/CN=Local Self Signed Certificate/emailAddress=info@lyntouch.com" -out "$CERTS_DIR/$FILENAME.crt"
 }
 
+
 function gen_host_ssl() {
     if [ -z $HOST ]; then
         echo "Host argument is required"
@@ -269,6 +270,18 @@ function gen_host_ssl() {
     openssl req -new -sha256 -nodes -out "$CERTS_DIR/$HOST.csr" -newkey rsa:2048 -subj "/C=GB/ST=London/L=London/O=$HOST/OU=IT Department/CN=Lyntouch Self Signed Host/emailAddress=info@lyntouch.com" -keyout "$CERTS_DIR/privkey.pem"
     openssl x509 -req -passin pass:default -in "$CERTS_DIR/$HOST.csr" -CA "$ROOT_CRT" -CAkey "$ROOT_CA" -CAcreateserial -out "$CERTS_DIR/fullchain.pem" -days 500 -sha256 -extfile <(printf "$extFile")
     rm -f "$CERTS_DIR/$HOST.csr"
+}
+
+function gen_host_ssl_extfile() {
+    domain=$1
+    cat <<EOF
+		authorityKeyIdentifier=keyid,issuer\n
+		basicConstraints=CA:FALSE\n
+		keyUsage=digitalSignature,nonRepudiation,keyEncipherment,dataEncipherment\n
+		subjectAltName = @alt_names\n
+		[alt_names]\n
+		DNS.1 = $domain
+EOF
 }
 
 function build_service {
