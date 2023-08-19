@@ -28,8 +28,8 @@ function gen_host_ssl() {
         exit 1
     fi
     extFile=$(gen_host_ssl_extfile $HOST)
-    openssl req -new -sha256 -nodes -out "$CERTS_DIR/$HOST.csr" -newkey rsa:2048 -subj "/C=GB/ST=London/L=London/O=$HOST/OU=IT Department/CN=$HOST Self Signed Certificate/emailAddress=info@$HOST" -keyout "$CERTS_DIR/privkey.pem"
-    openssl x509 -req -passin pass:default -in "$CERTS_DIR/$HOST.csr" -CA "$ROOT_CRT" -CAkey "$ROOT_CA" -CAcreateserial -out "$CERTS_DIR/fullchain.pem" -days 500 -sha256 -extfile <(printf "$extFile")
+    openssl req -new -sha256 -nodes -out "$CERTS_DIR/$HOST.csr" -newkey rsa:2048 -subj "/C=GB/ST=London/L=London/O=$HOST/OU=IT Department/CN=$HOST Self Signed Certificate/emailAddress=info@$HOST" -keyout "$HOST.pem"
+    openssl x509 -req -passin pass:default -in "$CERTS_DIR/$HOST.csr" -CA "$ROOT_CRT" -CAkey "$ROOT_CA" -CAcreateserial -out $HOST.crt -days 500 -sha256 -extfile <(printf "$extFile")
     rm -f "$CERTS_DIR/$HOST.csr"
 }
 

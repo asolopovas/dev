@@ -12,9 +12,8 @@ SCRIPT_DIR=${SCRIPT_DIR:-$HOME/www/dev}
 SITES_DIR=$SCRIPT_DIR/nginx/sites
 
 readonly CERTS_DIR=$SCRIPT_DIR/nginx/certs
-readonly ROOT_CA=$CERTS_DIR/rootCA.key
+readonly ROOT_KEY=$CERTS_DIR/rootCA.key
 readonly ROOT_CRT=$CERTS_DIR/rootCA.crt
-pushd $SCRIPT_DIR >/dev/null
 
 function is_wsl() {
     grep -q WSL /proc/version
@@ -231,12 +230,12 @@ function new_wp {
     db_cmd create wordpress
 }
 
-function import_root_ca_to_chrome() {
+function import_ROOT_KEY_to_chrome() {
     cert_filename=$1
     cert_nickname=${2:-"Root CA"}
 
     if [ -z "$cert_filename" ] || [ -z "$cert_nickname" ]; then
-        echo "Usage: import_root_ca_to_chrome <certificate_filename> <certificate_nickname>"
+        echo "Usage: import_ROOT_KEY_to_chrome <certificate_filename> <certificate_nickname>"
         return 1
     fi
 
@@ -260,16 +259,17 @@ function gen_root_ssl() {
     openssl req -x509 -new -nodes -passin pass:default -key "$CERTS_DIR/$FILENAME.key" -sha256 -days 20480 -subj "/C=GB/ST=London/L=London/O=Lyntouch/OU=IT Department/CN=Local Self Signed Certificate/emailAddress=info@lyntouch.com" -out "$CERTS_DIR/$FILENAME.crt"
 }
 
-
 function gen_host_ssl() {
     if [ -z $HOST ]; then
         echo "Host argument is required"
         exit 1
     fi
+    # echo current dir
+    pwd
     extFile=$(gen_host_ssl_extfile $HOST)
-    openssl req -new -sha256 -nodes -out "$CERTS_DIR/$HOST.csr" -newkey rsa:2048 -subj "/C=GB/ST=London/L=London/O=$HOST/OU=IT Department/CN=Lyntouch Self Signed Host/emailAddress=info@lyntouch.com" -keyout "$CERTS_DIR/privkey.pem"
-    openssl x509 -req -passin pass:default -in "$CERTS_DIR/$HOST.csr" -CA "$ROOT_CRT" -CAkey "$ROOT_CA" -CAcreateserial -out "$CERTS_DIR/fullchain.pem" -days 500 -sha256 -extfile <(printf "$extFile")
-    rm -f "$CERTS_DIR/$HOST.csr"
+    openssl req -new -sha256 -nodes -out "/tmp/$HOST.csr" -newkey rsa:2048 -subj "/C=GB/ST=London/L=London/O=$HOST/OU=IT Department/CN=Lyntouch Self Signed Host/emailAddress=info@lyntouch.com" -keyout "$HOST.key"
+    openssl x509 -req -passin pass:default -in "/tmp/$HOST.csr" -CA "$ROOT_CRT" -CAkey "$ROOT_KEY" -CAcreateserial -out "$HOST.crt" -days 500 -sha256 -extfile <(printf "$extFile")
+    rm -f "/tmp/$HOST.csr"
 }
 
 function gen_host_ssl_extfile() {
@@ -347,7 +347,7 @@ hostssl)
     gen_host_ssl $HOST
     ;;
 import-rootca)
-    import_root_ca_to_chrome $ROOT_CRT
+    import_ROOT_KEY_to_chrome $ROOT_CRT
     ;;
 install)
     ln -sf $SCRIPT_DIR/web.sh $HOME/.local/bin/web
@@ -390,7 +390,7 @@ restart)
     ;;
 rootssl)
     gen_root_ssl
-    import_root_ca_to_chrome $ROOT_CRT
+    import_ROOT_KEY_to_chrome $ROOT_CRT
     docker compose build nginx
     docker compose up -d nginx
     ;;
