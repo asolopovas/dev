@@ -10,6 +10,7 @@ DEST="${3:-false}"
 WEB_ROOT=${WEB_ROOT:-$HOME/www}
 SCRIPT_DIR=${SCRIPT_DIR:-$HOME/www/dev}
 SITES_DIR=$SCRIPT_DIR/nginx/sites
+DC="docker compose -f $SCRIPT_DIR/docker-compose.yml"
 
 readonly CERTS_DIR=$SCRIPT_DIR/nginx/certs
 readonly ROOT_KEY=$CERTS_DIR/rootCA.key
@@ -90,9 +91,9 @@ function build_webconf {
     done
 
     echo "Web Config Rebuild"
-    docker compose stop nginx && docker compose rm -f nginx
+    $DC stop nginx && $DC rm -f nginx
     docker volume rm dev_ssl
-    docker compose up -d nginx
+    $DC up -d nginx
 }
 
 function add_host_config {
@@ -184,13 +185,13 @@ function db_cmd {
 
     if [ $action == "create" ]; then
         echo "Creating DB: $db_name"
-        docker compose exec mariadb mysql -uroot -psecret -e "CREATE USER IF NOT EXISTS ${db_name}@'%' IDENTIFIED BY 'secret';"
-        docker compose exec mariadb mysql -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS ${db_name};"
-        docker compose exec mariadb mysql -uroot -psecret -e "GRANT ALL PRIVILEGES ON ${db_name}.* TO ${db_name}@'%'"
+        $DC exec mariadb mysql -uroot -psecret -e "CREATE USER IF NOT EXISTS ${db_name}@'%' IDENTIFIED BY 'secret';"
+        $DC exec mariadb mysql -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS ${db_name};"
+        $DC exec mariadb mysql -uroot -psecret -e "GRANT ALL PRIVILEGES ON ${db_name}.* TO ${db_name}@'%'"
     else
         echo "Removing $db_name user and database"
-        docker compose exec mariadb mysql -uroot -psecret -e "DROP DATABASE IF EXISTS ${db_name};"
-        docker compose exec mariadb mysql -uroot -psecret -e "DROP USER IF EXISTS ${db_name}@'%';"
+        $DC exec mariadb mysql -uroot -psecret -e "DROP DATABASE IF EXISTS ${db_name};"
+        $DC exec mariadb mysql -uroot -psecret -e "DROP USER IF EXISTS ${db_name}@'%';"
     fi
 }
 
@@ -297,17 +298,17 @@ function build_service {
     done
 
     if [ -z "$service" ]; then
-        docker compose build $flag --parallel
-        docker compose up -d --force-recreate
+        $DC build $flag --parallel
+        $DC up -d --force-recreate
     else
-        docker compose build $flag $service
-        docker compose up --force-recreate -d $service
+        $DC build $flag $service
+        $DC up --force-recreate -d $service
     fi
 }
 
 case "$CMD" in
 bash)
-    docker compose exec app bash
+    $DC exec app bash
     ;;
 build)
     build_service $2 $3
@@ -323,13 +324,13 @@ debug)
         return 1
     fi
     sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$mode/" $SCRIPT_DIR/.env
-    docker compose up -d app
+    $DC up -d app
     ;;
 dir)
     echo $SCRIPT_DIR
     ;;
 fish)
-    docker compose exec app fish
+    $DC exec app fish
     ;;
 git-update)
     user=${2}
@@ -354,7 +355,7 @@ install)
     ln -sf $SCRIPT_DIR/web.completions.fish $HOME/.config/fish/completions/web.fish
     ;;
 log)
-    docker compose logs -f $2
+    $DC logs -f $2
     ;;
 new-wp)
     root=$(root_domain $HOST)
@@ -368,7 +369,7 @@ new-wp)
     build_webconf
     ;;
 ps)
-    docker compose ps $2
+    $DC ps $2
     ;;
 remove-host)
     confirm_action "Are you sure you want to remove $HOST?"
@@ -386,28 +387,28 @@ remove-host)
     build_webconf
     ;;
 restart)
-    docker compose restart $2
+    $DC restart $2
     ;;
 rootssl)
     gen_root_ssl
     import_ROOT_KEY_to_chrome $ROOT_CRT
-    docker compose build nginx
-    docker compose up -d nginx
+    $DC build nginx
+    $DC up -d nginx
     ;;
 redis-flush)
-    docker compose exec redis redis-cli flushall
+    $DC exec redis redis-cli flushall
     ;;
 redis-monitor)
-    docker compose exec redis redis-cli monitor
+    $DC exec redis redis-cli monitor
     ;;
 stop)
-    docker compose stop $2
+    $DC stop $2
     ;;
 down)
-    docker compose down
+    $DC down
     ;;
 up)
-    docker compose up -d $2
+    $DC up -d $2
     ;;
 *)
     cat <<EOF
