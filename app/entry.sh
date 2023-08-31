@@ -22,15 +22,14 @@ if [ "$LIVERELOAD" = 'true' ]; then
     node $LR_PATH/livereload.js &
 fi
 
-if ! curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar; then
-    echo "Failed to download wp-cli.phar" >&2
-    exit 1
-fi
-
-chmod +x wp-cli.phar
-if ! mv wp-cli.phar "$HOME/.local/bin/wp"; then
-    echo "Failed to move wp-cli.phar" >&2
-    exit 1
+if [ ! -f "$HOME/.local/bin/wp" ]; then
+    curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar || {
+        echo "Download failed"
+    }
+    chmod +x wp-cli.phar
+    mv wp-cli.phar "$HOME/.local/bin/wp" || {
+        echo "Move failed"
+    }
 fi
 
 exec "$@"
