@@ -17,7 +17,7 @@ fi
 if [ "$LIVERELOAD" = 'true' ]; then
     LR_PATH="/var/livereload"
     source "$NVM_DIR/nvm.sh"
-    sudo chown -R www:www $LR_PATH
+    chown -R www:www $LR_PATH
     yarn --cwd $LR_PATH install
     node $LR_PATH/livereload.js &
 fi

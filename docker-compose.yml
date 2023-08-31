@@ -53,8 +53,8 @@ services:
             - 25:25
         networks:
             - nginx
-        command: sudo -u root php-fpm
-        # command: tail -f /dev/null
+        # command: sudo -u root php-fpm
+        command: tail -f /dev/null
 
 
     nginx:
