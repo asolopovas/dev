@@ -1,11 +1,11 @@
 FROM asolopovas/php-fpm:3.2
 ARG APP_USER=www
-ENV APP_USER=${APP_USER}
 ARG WORKDIR=/var/www
-ENV WORKDIR ${WORKDIR}
 ARG HOME=/home/${APP_USER}
-ENV HOME ${HOME}
 ARG NVM_NODEJS_ORG_MIRROR=${NVM_NODEJS_ORG_MIRROR}
+ENV APP_USER=${APP_USER}
+ENV WORKDIR ${WORKDIR}
+ENV HOME ${HOME}
 ENV NVM_NODEJS_ORG_MIRROR=${NVM_NODEJS_ORG_MIRROR}
 ENV PATH ${WORKDIR}/.local/bin:${HOME}/.composer/vendor/bin:$PATH
 WORKDIR ${WORKDIR}
@@ -32,7 +32,8 @@ RUN apk add --no-cache \
     py3-pynvim \
     rsync \
     ripgrep \
-    sudo
+    sudo \
+    libstdc++
 
 RUN echo "fs.inotify.max_user_instances=524288" >> /etc/sysctl.conf && sysctl -p
 
