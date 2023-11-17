@@ -1,4 +1,4 @@
-FROM asolopovas/php-fpm:3.2
+FROM asolopovas/php-fpm:3.4
 ARG APP_USER=www
 ARG WORKDIR=/var/www
 ARG HOME=/home/${APP_USER}
