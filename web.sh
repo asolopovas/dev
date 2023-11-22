@@ -16,6 +16,16 @@ readonly CERTS_DIR=$SCRIPT_DIR/nginx/certs
 readonly ROOT_KEY=$CERTS_DIR/rootCA.key
 readonly ROOT_CRT=$CERTS_DIR/rootCA.crt
 
+add_host() {
+    local host_entry="$1"
+    if ! grep -q "$host_entry" /etc/hosts; then
+        echo "Adding $host_entry to /etc/hosts"
+        echo "127.0.0.1 $host_entry" | sudo tee -a /etc/hosts > /dev/null
+    else
+        echo "$host_entry already exists in /etc/hosts"
+    fi
+}
+
 function is_wsl() {
     grep -q WSL /proc/version
 }
@@ -65,6 +75,8 @@ function build_webconf {
         exit 1
     fi
 
+    add_host "phpmyadmin.test"
+
     # Loop through each host in the config file
     jq -c '.hosts[]' $config_path | while read i; do
         hostname=$(echo "$i" | jq -r '.name')
@@ -75,6 +87,8 @@ function build_webconf {
         site_conf="$SITES_DIR/$hostname.conf"
         debugout="$HOME/www/$hostname/.vscode"
 
+        add_host "$hostname"
+
         [ "$type" == "laravel" ] && nginx_root="$nginx_root/public"
 
         mkdir -p $debugout
@@ -84,7 +98,7 @@ function build_webconf {
             -e "s|\${NGINX_ROOT}|${nginx_root}|g;" \
             $SCRIPT_DIR/nginx/template.conf >$site_conf
 
-        echo "USE ${DB};" | docker exec -i dev-mariadb-1 /usr/bin/mysql -u root --password=secret
+        echo "CREATE DATABASE IF NOT EXISTS ${DB};" | docker exec -i dev-mariadb-1 /usr/bin/mysql -u root --password=secret
 
         [ "$type" == "wordpress" ] && sed -i -e "s|# \${WORDPRESS}|include                 extras/wordpress.conf;|g" $site_conf
 

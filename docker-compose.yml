@@ -5,11 +5,10 @@ volumes:
     livereload:
     db:
     phpmyadmin:
-
+    homefiles:
 
 networks:
     nginx:
-
 
 services:
     app:
@@ -36,6 +35,7 @@ services:
             - 8.8.8.8
         volumes:
             - ${MAPDIR}:${WORKDIR}
+            - homefiles:/home/${APP_USER}
             - $HOME/.ssh:/home/${APP_USER}/.ssh
             - $HOME/.cache/composer:/composer/cache
         environment:
@@ -56,9 +56,9 @@ services:
         command: sudo -u root php-fpm
         # command: tail -f /dev/null
 
-
     nginx:
         image: nginx:stable-alpine3.17
+        user: ${UID}:${GID}
         depends_on:
             - app
             - mariadb
@@ -70,8 +70,9 @@ services:
         restart: always
         volumes:
             - ${MAPDIR}:${WORKDIR}
+            - homefiles:/home/${APP_USER}
             - ./nginx/sites:/etc/nginx/sites-available
-            - ssl:/etc/letsencrypt
+            - ssl:/etc/letsencrypt/live
             - livereload:/var/www/livereload
             - phpmyadmin:/var/www/html
         environment:
@@ -81,10 +82,7 @@ services:
             - 443:443
         networks:
             nginx:
-                aliases:
-                    - db.3oak.test
         # command: tail -f /dev/null
-
 
     mariadb:
         image: mariadb:lts

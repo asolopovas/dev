@@ -1,0 +1,68 @@
+#!/bin/bash
+
+function cert_path() {
+    case $1 in
+        p*)
+            echo "/etc/letsencrypt/live/$2/fullchain.pem"
+        ;;
+        k*)
+            echo "/etc/letsencrypt/live/$2/privkey.pem"
+        ;;
+    esac
+}
+
+function is_dev_domain() {
+    [[ $1 == *.test ]]
+}
+
+function cert_exist() {
+    [ -f "$(cert_path p "$1")" ] && [ -f "$(cert_path k "$1")" ] && echo true
+}
+
+function generate_cert() {
+    local URL=$1
+    DEST=${2:-/etc/letsencrypt/live/$URL/}
+
+    if ! is_dev_domain "$URL"; then
+        printf "Certbot SSL for $URL and admin.$URL \n"
+        certbot --nginx run -n -m info@lyntouch.com --agree-tos -d "${URL}" -d "admin.${URL}" --key-path $DEST/privkey.pem --fullchain-path $DEST/fullchain.pem
+        rm "$DEST/dev.txt"
+    fi
+}
+
+read FIRST_URL SECOND_URL <<<"$SITES_ENABLED"
+echo "SSL Cert for domains: $FIRST_URL $SECOND_URL"
+
+generate_cert "$FIRST_URL"
+generate_cert "$SECOND_URL"
+
+if [ ! "$(cert_exist "phpmyadmin.$FIRST_URL")" ] && ! is_dev_domain "$FIRST_URL"; then
+    printf "Certbot SSL for phpmyadmin.$FIRST_URL \n"
+    certbot --nginx run -n -m info@lyntouch.com --agree-tos -d "phpmyadmin.${FIRST_URL}"
+fi
+
+# Tests
+test_is_dev_domain() {
+    ! is_dev_domain "example.com" && echo "Test 1 Passed"
+    is_dev_domain "example.test" && echo "Test 2 Passed"
+}
+
+test_cert_exist() {
+    # Assuming a file that always exists
+    cert_exist "/etc/passwd" && echo "Test 3 Passed"
+    # Assuming a file that doesn't exist
+    ! cert_exist "/path/to/non/existent/file" && echo "Test 4 Passed"
+}
+
+test_generate_cert() {
+    generate_cert "test.com" # this should show the generating message
+    generate_cert "example.test" # this shouldn't show anything as it's a .test domain
+}
+
+# Check for test flag
+if [[ $1 == "--test" ]]; then
+    test_is_dev_domain
+    test_cert_exist
+    test_generate_cert
+    exit 0
+fi

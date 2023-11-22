@@ -1,4 +1,4 @@
-set std_cmds 'install bash fish new-wp remove-host rootssl hostssl import-rootca debug redis-monitor redis-flush'
+set std_cmds 'install bash build-webconf fish new-wp remove-host rootssl hostssl import-rootca debug redis-monitor redis-flush'
 set debug_cmds 'off develop coverage debug profile trace'
 set docker_cmds_build 'build'
 set docker_cmds_other 'log restart ps'

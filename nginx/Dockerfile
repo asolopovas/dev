@@ -1,37 +1,52 @@
-FROM nginx:1.25.2-alpine3.18
+FROM nginx:1.25.3-alpine3.18
 
-# Copy nginx config
-COPY nginx.conf /etc/nginx/
+ARG WORKDIR=/var/www
+ARG APP_USER=nginx
+ARG GID=1000
+ARG UID=1000
 
-# Install necessary packages
 RUN apk update && apk upgrade; \
-    apk --update add logrotate bash; \
-    apk add --no-cache shadow openssl certbot certbot-nginx
+    apk --update add logrotate; \
+    apk add --no-cache fish bash shadow openssl certbot certbot-nginx
 
-# Add www-data account
-RUN groupmod -g 1000 -n www www-data; \
-    adduser -u 1000 -D -S -G www www;
+# User setup
+RUN [ ! -d $WORKDIR ] && mkdir -p $WORKDIR; \
+    groupmod -g ${GID} ${APP_USER} ; \
+    usermod -u ${UID} -g ${GID} ${APP_USER}
 
-# Create 'messages' file used from 'logrotate'
-RUN touch /var/log/messages
+# Chown Esential Directories
+RUN for dir in \
+    ${WORKDIR} \
+    /run \
+    /var/cache/nginx \
+    /etc/letsencrypt \
+    /etc/letsencrypt/live \
+    /var/lib/letsencrypt \
+    /var/log/letsencrypt \
+    /var/log/nginx \
+    /etc/nginx \
+    /etc/nginx/sites-available \
+    /etc/nginx/modules-enabled \
+    /etc/nginx/sites-enabled \
+    /etc/nginx/extras \
+    /tmp/nginx/cache; \
+    do [ ! -d $dir ] && mkdir -p $dir; chown -R ${UID}:${GID} $dir; done
 
-# remove the default conf
-RUN rm /etc/nginx/conf.d/default.conf
+# Misc setups
+RUN mkdir -p /var/cache/nginxfastcgi; \
+    chown -R ${UID}:${GID} /var/cache/nginxfastcgi; \
+    touch /var/log/messages; \
+    echo "0 */12 * * * certbot renew -q --nginx --deploy-hook 'nginx -s reload'" >> /etc/crontabs/root
 
-# Copy 'logrotate' config file
-COPY logrotate/nginx /etc/logrotate.d/
-COPY global /etc/nginx/global
-COPY extras /etc/nginx/extras
-COPY certs /etc/letsencrypt/live
+# various
+COPY scripts/* /usr/local/bin
+COPY --chown=${UID}:${GID} certs/* /etc/letsencrypt/live
+COPY --chown=${UID}:${GID} nginx.conf /etc/nginx
+COPY --chown=${UID}:${GID} sites/* /tmp
+COPY --chown=${UID}:${GID} extras /etc/nginx/extras
 
-RUN echo "0 */12 * * * certbot renew -q --nginx --deploy-hook 'nginx -s reload'" >> /etc/crontabs/root
-
-ARG WORKDIR=${WORKDIR}
-WORKDIR ${WORKDIR}
-
-CMD ["nginx", "-g", "daemon off;"]
-COPY scripts/* /usr/local/bin/
-RUN ln -s /bin/bash /bin/zsh
+USER ${APP_USER}
 ENTRYPOINT ["entry.sh"]
+CMD ["nginx", "-g", "daemon off;"]
 
 EXPOSE 80 443

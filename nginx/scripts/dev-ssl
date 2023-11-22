@@ -1,0 +1,36 @@
+#!/bin/bash
+
+ROOT_KEY="/tmp/rootCA.key"
+ROOT_CRT="/tmp/rootCA.crt"
+
+function extfile() {
+    domain=$1
+    cat <<EOF
+		authorityKeyIdentifier=keyid,issuer\n
+		basicConstraints=CA:FALSE\n
+		keyUsage=digitalSignature,nonRepudiation,keyEncipherment,dataEncipherment\n
+		subjectAltName = @alt_names\n
+		[alt_names]\n
+		DNS.1 = $domain
+EOF
+}
+
+function host_ssl() {
+    HOST="${1:-false}"
+    DEST=${2:-/etc/letsencrypt/live/$HOST-dev/}
+
+    if [ -z $HOST ] || [ -z $DEST ]; then
+        echo "Host and Certs Directory arguments required"
+        exit 1
+    fi
+
+    [ ! -d $DEST ] && mkdir -p $DEST
+
+    extFile=$(extfile $HOST)
+    openssl req -new -sha256 -nodes -out "/tmp/$HOST.csr" -newkey rsa:2048 -subj "/C=GB/ST=London/L=London/O=$HOST/OU=IT Department/CN=Lyntouch Self Signed/emailAddress=info@lyntouch.com" -keyout "$DEST/privkey.pem"
+    openssl x509 -req -passin pass:default -in "/tmp/$HOST.csr" -CA "$ROOT_CRT" -CAkey "$ROOT_KEY" -CAcreateserial -out "$DEST/fullchain.pem" -days 500 -sha256 -extfile <(printf "$extFile")
+    rm -f "/tmp/$HOST.csr"
+}
+
+
+host_ssl $1 $2

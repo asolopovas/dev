@@ -1,4 +1,15 @@
-#!/bin/sh
+#!/bin/bash
+
+SITES_AVAILABLE="/etc/nginx/sites-available"
+SITES="/etc/nginx/sites-available/*"
+
+echo '*******************************************************'
+echo "Working Directory: ${WORKDIR}"
+echo "Sites: ${SITES}"
+echo "Services Available: ${SITES_AVAILABLE}"
+printf "Active Sites: \n"
+for site in /etc/nginx/sites-available/*; do echo $site; done | awk '{print "Processing " $1}'
+echo '*******************************************************'
 
 # Start crond in background
 crond -l 2 -b
@@ -26,7 +37,7 @@ function gencert {
     fi
 }
 
-SITES="/etc/nginx/sites-available/*"
+
 for site in $SITES
 do
   SITE=$(basename $site)
