@@ -8,3 +8,4 @@ db/*.sql
 !nginx/sites/.gitkeep
 web-hosts.json
 build.log
+templates.yml

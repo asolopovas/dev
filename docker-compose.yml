@@ -57,6 +57,9 @@ services:
         # command: tail -f /dev/null
 
     nginx:
+        extends:
+            file: templates.yml
+            service: nginx
         image: nginx:stable-alpine3.17
         user: ${UID}:${GID}
         depends_on:
