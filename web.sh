@@ -20,7 +20,7 @@ add_host() {
     local host_entry="$1"
     if ! grep -q "$host_entry" /etc/hosts; then
         echo "Adding $host_entry to /etc/hosts"
-        echo "127.0.0.1 $host_entry" | sudo tee -a /etc/hosts > /dev/null
+        echo "127.0.0.1 $host_entry" | sudo tee -a /etc/hosts >/dev/null
     else
         echo "$host_entry already exists in /etc/hosts"
     fi
@@ -61,6 +61,7 @@ function check_host {
 
 function build_webconf {
     config_path=$SCRIPT_DIR/web-hosts.json
+    yaml_file="$SCRIPT_DIR/templates.yml"
     rm -rf $SITES_DIR/*.conf
     cp $SCRIPT_DIR/nginx/phpmyadmin.test.conf $SITES_DIR/
     # Check if config file exists, if not create default one
@@ -76,6 +77,17 @@ function build_webconf {
     fi
 
     add_host "phpmyadmin.test"
+
+    echo "services:" >$yaml_file
+    echo "  nginx:" >>$yaml_file
+    echo "    networks:" >>$yaml_file
+    echo "      nginx:" >>$yaml_file
+    echo "        aliases:" >>$yaml_file
+
+    jq -c '.hosts[]' $config_path | while read i; do
+        hostname=$(echo "$i" | jq -r '.name')
+        echo "          - $hostname" >>$yaml_file
+    done
 
     # Loop through each host in the config file
     jq -c '.hosts[]' $config_path | while read i; do
