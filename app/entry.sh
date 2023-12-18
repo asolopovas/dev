@@ -1,11 +1,20 @@
 #!/bin/bash
 
+source $HOME/.bashrc
+
 echo "*************************************************"
 echo "APP_ENV: $APP_ENV"
+echo "APP_DEBUG: $APP_DEBUG"
 echo "LIVERELOAD: $LIVERELOAD"
+echo "NVM_DIR: $NVM_DIR"
 echo "WORKDIR: $WORKDIR"
-env | grep PATH
-env | grep PNPM
+echo "GOPATH: $GOPATH"
+echo "Dotfiles Dir: $DOTFILES_DIR"
+echo "XDEBUG Host: $XDEBUG_HOST"
+echo "XDEBUG Mode: $XDEBUG_MODE"
+echo "XDEBUG IDE key: $XDEBUG_IDEKEY"
+echo "System Path Variables:"
+ls-path
 echo "*************************************************"
 
 if [ -z "$APP_ENV" ]; then

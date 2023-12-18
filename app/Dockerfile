@@ -7,10 +7,9 @@ ENV APP_USER=${APP_USER}
 ENV WORKDIR ${WORKDIR}
 ENV HOME ${HOME}
 ENV NVM_NODEJS_ORG_MIRROR=${NVM_NODEJS_ORG_MIRROR}
-ENV PATH ${WORKDIR}/.local/bin:${HOME}/.composer/vendor/bin:$PATH
 WORKDIR ${WORKDIR}
 
-RUN groupadd -g 1000 ${APP_USER} && useradd -u 1000 -ms /usr/bin/fish -g www ${APP_USER}
+RUN groupadd -g 1000 ${APP_USER} && useradd -u 1000 -ms /usr/bin/fish -g ${APP_USER} ${APP_USER}
 RUN chown -R ${APP_USER}:${APP_USER} ${WORKDIR}
 
 RUN mkdir /etc/sudoers.d; \
@@ -36,6 +35,7 @@ RUN apk add --no-cache \
     libstdc++
 
 RUN echo "fs.inotify.max_user_instances=524288" >> /etc/sysctl.conf && sysctl -p
+RUN ln -sf /bin/bash /bin/sh
 
 USER ${APP_USER}
 
@@ -56,8 +56,6 @@ RUN touch /var/log/entry.log; chown $APP_USER:$APP_USER /var/log/entry.log; chmo
 RUN ln -sf /bin/nvim /usr/local/bin/vim
 
 USER $APP_USER
-RUN git -C $HOME/dotfiles reset --hard; git -C $HOME/dotfiles pull
-RUN source $HOME/.bashrc
 
 ENTRYPOINT ["entry.sh"]
 
