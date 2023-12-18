@@ -34,7 +34,7 @@ if [ "$LIVERELOAD" = 'true' ]; then
     PNPM_HOME="$HOME/.local/share/pnpm"
     PATH=$PATH:$PNPM_HOME
     pnpm add -g livereload
-    livereload --port 35729 --exts "js,ts,php,twig,html" --exclusions node_modules/,vendor/ "${WORKDIR}"
+    livereload --port 35729 --exts "js,ts,php,twig,html" --exclusions node_modules/,vendor/ "${WORKDIR}" &
 fi
 
 if [ ! -f "$HOME/.local/bin/wp" ]; then
