@@ -34,8 +34,9 @@ services:
         dns:
             - 8.8.8.8
         volumes:
-            - ${MAPDIR}:${WORKDIR}
+            - ./app/entry.sh:/usr/local/bin/entry.sh
             - homefiles:/home/${APP_USER}
+            - ${MAPDIR}:${WORKDIR}
             - $HOME/.ssh:/home/${APP_USER}/.ssh
             - $HOME/.cache/composer:/composer/cache
         environment:
@@ -72,8 +73,8 @@ services:
                 - WORKDIR=${WORKDIR}
         restart: always
         volumes:
-            - ${MAPDIR}:${WORKDIR}
             - homefiles:/home/${APP_USER}
+            - ${MAPDIR}:${WORKDIR}
             - ./nginx/sites:/etc/nginx/sites-available
             - ssl:/etc/letsencrypt/live
             - livereload:/var/www/livereload

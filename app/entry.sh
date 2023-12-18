@@ -1,6 +1,12 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-NVM_DIR="$HOME/.nvm"
+echo "*************************************************"
+echo "APP_ENV: $APP_ENV"
+echo "LIVERELOAD: $LIVERELOAD"
+echo "WORKDIR: $WORKDIR"
+env | grep PATH
+env | grep PNPM
+echo "*************************************************"
 
 if [ -z "$APP_ENV" ]; then
     echo "APP_ENV is not set" >&2
@@ -15,11 +21,11 @@ if ! crond -l 2 -b; then
 fi
 
 if [ "$LIVERELOAD" = 'true' ]; then
-    LR_PATH="/var/livereload"
-    source "$NVM_DIR/nvm.sh"
-    chown -R www:www $LR_PATH
-    yarn --cwd $LR_PATH install
-    node $LR_PATH/livereload.js &
+    # source "$NVM_DIR/nvm.sh"
+    PNPM_HOME="$HOME/.local/share/pnpm"
+    PATH=$PATH:$PNPM_HOME
+    pnpm add -g livereload
+    livereload --port 35729 --exts "js,ts,php,twig,html" --exclusions node_modules/,vendor/ "${WORKDIR}"
 fi
 
 if [ ! -f "$HOME/.local/bin/wp" ]; then

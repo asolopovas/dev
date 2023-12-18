@@ -44,11 +44,10 @@ RUN FISH=${FISH} OHMYFISH=${OHMYFISH} FZF=${FZF} FDFIND=${FDFIND} NVIM=${NVIM} O
     bash -c "$(curl -fsSLH 'Cache-Control: no-cache' http://raw.githubusercontent.com/asolopovas/dotfiles/master/init.sh)"
 
 RUN mkdir -p ${HOME}/.local/bin; curl -s http://getcomposer.org/installer | php -- --install-dir=${HOME}/.local/bin --filename=composer
-COPY --chown=$APP_USER:$APP_USER package.json livereload.js  /var/livereload/
+RUN curl -fsSL https://get.pnpm.io/install.sh | PNPM_VERSION=8.12.1 ENV="$HOME/.bashrc" SHELL="$(which bash)" bash -
 
 USER root
 COPY config/msmtprc /etc/msmtprc
-COPY entry.sh /usr/local/bin/
 COPY scripts/* /usr/local/bin/
 COPY php-fpm.conf /usr/local/etc/
 COPY config/conf.d/* /usr/local/etc/php/conf.d
@@ -57,7 +56,8 @@ RUN touch /var/log/entry.log; chown $APP_USER:$APP_USER /var/log/entry.log; chmo
 RUN ln -sf /bin/nvim /usr/local/bin/vim
 
 USER $APP_USER
-
+RUN git -C $HOME/dotfiles reset --hard; git -C $HOME/dotfiles pull
+RUN source $HOME/.bashrc
 
 ENTRYPOINT ["entry.sh"]
 
