@@ -31,7 +31,9 @@ RUN apk add --no-cache \
     py3-pynvim \
     rsync \
     ripgrep \
+    iproute2-ss \
     sudo \
+    busybox-extras \
     libstdc++
 
 RUN echo "fs.inotify.max_user_instances=524288" >> /etc/sysctl.conf && sysctl -p
