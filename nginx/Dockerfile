@@ -43,7 +43,6 @@ COPY scripts/* /usr/local/bin
 COPY --chown=${UID}:${GID} certs/* /etc/letsencrypt/live
 COPY --chown=${UID}:${GID} nginx.conf /etc/nginx
 COPY --chown=${UID}:${GID} sites/* /tmp
-COPY --chown=${UID}:${GID} extras /etc/nginx/extras
 
 USER ${APP_USER}
 ENTRYPOINT ["entry.sh"]

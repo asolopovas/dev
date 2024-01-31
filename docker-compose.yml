@@ -77,6 +77,7 @@ services:
             - homefiles:/home/${APP_USER}
             - ${MAPDIR}:${WORKDIR}
             - ./nginx/sites:/etc/nginx/sites-available
+            - ./nginx/extras:/etc/nginx/extras
             - ssl:/etc/letsencrypt/live
             - livereload:/var/www/livereload
             - phpmyadmin:/var/www/html
