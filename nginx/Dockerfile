@@ -7,7 +7,7 @@ ARG UID=1000
 
 RUN apk update && apk upgrade; \
     apk --update add logrotate; \
-    apk add --no-cache fish bash shadow openssl certbot certbot-nginx
+    apk add --no-cache fish bash shadow openssl certbot certbot-nginx sudo;
 
 # User setup
 RUN [ ! -d $WORKDIR ] && mkdir -p $WORKDIR; \
@@ -24,6 +24,7 @@ RUN for dir in \
     /var/lib/letsencrypt \
     /var/log/letsencrypt \
     /var/log/nginx \
+    /var/www \
     /etc/nginx \
     /etc/nginx/sites-available \
     /etc/nginx/modules-enabled \

@@ -74,7 +74,7 @@ services:
                 - WORKDIR=${WORKDIR}
         restart: always
         volumes:
-            - homefiles:/home/${APP_USER}
+            - homefiles:/var/cache/nginx
             - ${MAPDIR}:${WORKDIR}
             - ./nginx/sites:/etc/nginx/sites-available
             - ./nginx/extras:/etc/nginx/extras
