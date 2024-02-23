@@ -1,4 +1,4 @@
-FROM nginx:1.25.3-alpine3.18
+FROM nginx:stable-alpine
 
 ARG WORKDIR=/var/www
 ARG APP_USER=nginx
@@ -7,7 +7,7 @@ ARG UID=1000
 
 RUN apk update && apk upgrade; \
     apk --update add logrotate; \
-    apk add --no-cache fish bash shadow openssl certbot certbot-nginx sudo;
+    apk add --no-cache fish bash shadow openssl certbot certbot-nginx nginx-mod-http-headers-more sudo;
 
 # User setup
 RUN [ ! -d $WORKDIR ] && mkdir -p $WORKDIR; \
