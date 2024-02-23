@@ -1,4 +1,4 @@
-FROM nginx:stable-alpine
+FROM nginx:1.25.4-alpine3.18
 
 ARG WORKDIR=/var/www
 ARG APP_USER=nginx
