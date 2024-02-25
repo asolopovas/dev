@@ -45,6 +45,8 @@ COPY --chown=${UID}:${GID} certs/* /etc/letsencrypt/live
 COPY --chown=${UID}:${GID} nginx.conf /etc/nginx
 COPY --chown=${UID}:${GID} sites/* /tmp
 
+RUN touch /var/run/nginx.pid && chown ${UID}:${GID} /var/run/nginx.pid;
+
 USER ${APP_USER}
 ENTRYPOINT ["entry.sh"]
 CMD ["nginx", "-g", "daemon off;"]
