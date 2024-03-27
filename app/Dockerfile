@@ -54,7 +54,6 @@ COPY scripts/* /usr/local/bin/
 COPY php-fpm.conf /usr/local/etc/
 
 COPY config/conf.d/* /usr/local/etc/php/conf.d
-RUN touch /var/log/php-fpm.log; chown $APP_USER:$APP_USER /var/log/php-fpm.log; chmod 700 /var/log/php-fpm.log
 RUN touch /var/log/entry.log; chown $APP_USER:$APP_USER /var/log/entry.log; chmod 700 /var/log/entry.log
 RUN ln -sf /bin/nvim /usr/local/bin/vim
 
