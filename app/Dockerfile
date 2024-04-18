@@ -51,7 +51,6 @@ RUN curl -fsSL https://get.pnpm.io/install.sh | PNPM_VERSION=8.15.1 ENV="$HOME/.
 USER root
 COPY config/msmtprc /etc/msmtprc
 COPY scripts/* /usr/local/bin/
-COPY php-fpm.conf /usr/local/etc/
 
 COPY config/conf.d/* /usr/local/etc/php/conf.d
 RUN touch /var/log/entry.log; chown $APP_USER:$APP_USER /var/log/entry.log; chmod 700 /var/log/entry.log
