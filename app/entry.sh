@@ -24,7 +24,8 @@ fi
 
 sudo -E bash -c "source /usr/local/bin/php-env.sh"
 
-if ! crond -l 2 -b; then
+if ! crond -d 2; then
+    sudo mkdir -p /etc/crontabs/www
     echo "Failed to start cron daemon" >&2
     exit 1
 fi

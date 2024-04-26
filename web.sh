@@ -89,6 +89,7 @@ function build_webconf {
         echo "          - $hostname" >>$yaml_file
     done
 
+    echo "" > $SCRIPT_DIR/crontab
     # Loop through each host in the config file
     jq -c '.hosts[]' $config_path | while read i; do
         hostname=$(echo "$i" | jq -r '.name')
@@ -98,6 +99,8 @@ function build_webconf {
         nginx_root="/var/www/$hostname"
         site_conf="$SITES_DIR/$hostname.conf"
         debugout="$HOME/www/$hostname/.vscode"
+
+        echo "* * * * * cd /var/www/$hostname && php /var/www/$hostname/wp-cron.php"  >> $SCRIPT_DIR/crontab
 
         add_host "$hostname"
 

@@ -33,6 +33,7 @@ services:
             8.8.8.8
         volumes:
             - ./app/entry.sh:/usr/local/bin/entry.sh
+            - ./crontab:/etc/crontabs/www
             - homefiles:/home/${APP_USER}
             - ${MAPDIR}:${WORKDIR}
             - $HOME/.ssh:/home/${APP_USER}/.ssh

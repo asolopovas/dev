@@ -19,6 +19,7 @@ RUN mkdir /etc/sudoers.d; \
 
 RUN apk add --no-cache \
     bash \
+    btop \
     coreutils \
     fd \
     fish \
@@ -46,11 +47,12 @@ RUN FISH=${FISH} OHMYFISH=${OHMYFISH} FZF=${FZF} FDFIND=${FDFIND} NVIM=${NVIM} O
     bash -c "$(curl -fsSLH 'Cache-Control: no-cache' http://raw.githubusercontent.com/asolopovas/dotfiles/master/init.sh)"
 
 RUN mkdir -p ${HOME}/.local/bin; curl -s http://getcomposer.org/installer | php -- --install-dir=${HOME}/.local/bin --filename=composer
-RUN curl -fsSL https://get.pnpm.io/install.sh | PNPM_VERSION=8.15.1 ENV="$HOME/.bashrc" SHELL="$(which bash)" bash -
+RUN curl -fsSL https://get.pnpm.io/install.sh | PNPM_VERSION=9.0.6 ENV="$HOME/.bashrc" SHELL="$(which bash)" bash -
 
 USER root
 COPY config/msmtprc /etc/msmtprc
 COPY scripts/* /usr/local/bin/
+RUN chmod 4755 /usr/bin/crontab
 
 COPY config/conf.d/* /usr/local/etc/php/conf.d
 RUN touch /var/log/entry.log; chown $APP_USER:$APP_USER /var/log/entry.log; chmod 700 /var/log/entry.log
