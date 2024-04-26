@@ -100,7 +100,7 @@ function build_webconf {
         site_conf="$SITES_DIR/$hostname.conf"
         debugout="$HOME/www/$hostname/.vscode"
 
-        echo "* * * * * cd /var/www/$hostname && php /var/www/$hostname/wp-cron.php"  >> $SCRIPT_DIR/crontab
+        echo "* * * * * cd /var/www/$hostname && php /var/www/$hostname/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2"  >> $SCRIPT_DIR/crontab
 
         add_host "$hostname"
 
