@@ -1,4 +1,4 @@
-FROM asolopovas/php-fpm:1.2
+FROM asolopovas/php-fpm:1.2-php82
 ARG APP_USER=www
 ARG WORKDIR=/var/www
 ARG HOME=/home/${APP_USER}
@@ -35,6 +35,7 @@ RUN apk add --no-cache \
     iproute2-ss \
     sudo \
     busybox-extras \
+    logrotate \
     libstdc++
 
 RUN echo "fs.inotify.max_user_instances=524288" >> /etc/sysctl.conf && sysctl -p
