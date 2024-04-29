@@ -19,7 +19,6 @@ services:
                 FISH: ${FISH}
                 OHMYFISH: ${OHMYFISH}
                 OHMYBASH: ${OHMYBASH}
-                LIVERELOAD: ${LIVERELOAD}
                 FZF: ${FZF}
                 FDFIND: ${FDFIND}
                 NVIM: ${NVIM}
