@@ -58,7 +58,6 @@ services:
             options:
                 max-size: "128m"
                 max-file: "1"
-        command: sudo -u root php-fpm
         # command: tail -f /dev/null
 
     nginx:

@@ -62,5 +62,6 @@ RUN ln -sf /bin/nvim /usr/local/bin/vim
 USER $APP_USER
 
 ENTRYPOINT ["entry.sh"]
+CMD ["/usr/local/sbin/php-fpm"]
 
 EXPOSE 80 443 9000
