@@ -55,7 +55,7 @@ COPY config/msmtprc /etc/msmtprc
 COPY scripts/* /usr/local/bin/
 RUN chmod 4755 /usr/bin/crontab
 
-COPY config/conf.d/* /usr/local/etc/php/conf.d
+COPY conf.d/* /usr/local/etc/php/conf.d
 RUN touch /var/log/entry.log; chown $APP_USER:$APP_USER /var/log/entry.log; chmod 700 /var/log/entry.log
 RUN ln -sf /bin/nvim /usr/local/bin/vim
 
