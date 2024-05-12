@@ -14,15 +14,16 @@ services:
         build:
             context: ./app
             args:
-                FISH: ${FISH}
-                OHMYFISH: ${OHMYFISH}
-                OHMYBASH: ${OHMYBASH}
                 FZF: ${FZF}
+                FISH: ${FISH}
                 FDFIND: ${FDFIND}
+                PNPM_VERSION: ${PNPM_VERSION}
                 NODE: ${NODE}
                 NODE_VERSION: ${NODE_VERSION}
                 NVM_NODEJS_ORG_MIRROR: ${NVM_NODEJS_ORG_MIRROR}
                 NVIM: ${NVIM}
+                OHMYFISH: ${OHMYFISH}
+                OHMYBASH: ${OHMYBASH}
                 WORKDIR: ${WORKDIR}
         restart: always
         working_dir: ${WORKDIR}

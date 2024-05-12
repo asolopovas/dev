@@ -1,6 +1,7 @@
 FROM asolopovas/php-fpm:1.2-php82
 ARG APP_USER=www
 ARG WORKDIR=/var/www
+ARG PNPM_VERSION=${PNPM_VERSION}
 ARG HOME=/home/${APP_USER}
 ARG NVM_NODEJS_ORG_MIRROR=${NVM_NODEJS_ORG_MIRROR}
 ENV APP_USER=${APP_USER}
@@ -48,7 +49,7 @@ RUN FISH=${FISH} OHMYFISH=${OHMYFISH} FZF=${FZF} FDFIND=${FDFIND} NVIM=${NVIM} O
     bash -c "$(curl -fsSLH 'Cache-Control: no-cache' http://raw.githubusercontent.com/asolopovas/dotfiles/master/init.sh)"
 
 RUN mkdir -p ${HOME}/.local/bin; curl -s http://getcomposer.org/installer | php -- --install-dir=${HOME}/.local/bin --filename=composer
-RUN curl -fsSL https://get.pnpm.io/install.sh | PNPM_VERSION=9.0.6 ENV="$HOME/.bashrc" SHELL="$(which bash)" bash -
+RUN curl -fsSL https://get.pnpm.io/install.sh | PNPM_VERSION=${PNPM_VERSION} ENV="$HOME/.bashrc" SHELL="$(which bash)" bash -
 
 USER root
 COPY config/msmtprc /etc/msmtprc
