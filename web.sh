@@ -113,7 +113,7 @@ function build_webconf {
             -e "s|\${NGINX_ROOT}|${nginx_root}|g;" \
             $SCRIPT_DIR/nginx/template.conf >$site_conf
 
-        echo "CREATE DATABASE IF NOT EXISTS ${DB};" | docker exec -i dev-mariadb-1 /usr/bin/mysql -u root --password=secret
+        echo "CREATE DATABASE IF NOT EXISTS ${DB};" | docker exec -i dev-mariadb-1 /usr/bin/mariadb -u root --password=secret
 
         [ "$type" == "wordpress" ] && sed -i -e "s|# \${WORDPRESS}|include                 extras/wordpress.conf;|g" $site_conf
 
