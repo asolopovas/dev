@@ -252,7 +252,7 @@ function new_wp {
     if [ ! -d "$project_path" ]; then
         mkdir -p "$project_path"
         mkdir -p ./tmp_dir
-        printf green "Extracting Wordpress"
+        print_color green "Extracting Wordpress"
         tar -xzf "$WEB_ROOT/wordpress.tar.gz" -C ./tmp_dir
         rm -rf ./tmp_dir/wordpress/wp-content/themes/twenty*
         mv ./tmp_dir/wordpress/* "$project_path"
@@ -322,6 +322,14 @@ function program_installed {
         echo "Error: $1 is not installed." >&2
         return 1
     fi
+}
+
+function print_color() {
+    declare -A colors=(
+        ['red']='\033[31m'
+        ['green']='\033[0;32m'
+    )
+    echo -e "${colors[$1]}$2\033[0m"
 }
 
 function root_domain {
