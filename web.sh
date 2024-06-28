@@ -16,7 +16,7 @@ readonly CERTS_DIR=$SCRIPT_DIR/nginx/certs
 readonly ROOT_KEY=$CERTS_DIR/rootCA.key
 readonly ROOT_CRT=$CERTS_DIR/rootCA.crt
 
-add_host() {
+function add_host() {
     local host_entry="$1"
     if ! grep -q "$host_entry" /etc/hosts; then
         echo "Adding $host_entry to /etc/hosts"
@@ -26,36 +26,43 @@ add_host() {
     fi
 }
 
-function is_wsl() {
-    grep -q WSL /proc/version
-}
+function add_host_config {
+    program_installed jq || return 1
 
-function program_installed {
-    if ! [ -x "$(command -v $1)" ]; then
-        echo "Error: $1 is not installed." >&2
+    host_type="${1:-wordpress}"
+    if [ "$host_type" == "wordpress" ]; then
+        db_name="$(root_domain $HOST)_wp"
+    else
+        db_name="$(root_domain $HOST)_db"
+    fi
+
+    json_file="$WEB_ROOT/dev/web-hosts.json"
+
+    # Check if the host already exists in the json file
+    existing_host=$(jq -r --arg hn "$HOST" '.hosts[] | select(.name == $hn)' $json_file)
+    if [ -n "$existing_host" ]; then
+        echo "Error: Host $HOST already exists in the JSON file." >&2
         return 1
     fi
+
+    # create new host object
+    new_host=$(jq -n \
+        --arg hn "$HOST" \
+        --arg ht "$host_type" \
+        --arg db "$db_name" \
+        '{name: $hn, type: $ht, db: $db}')
+
+    # add new host to the json file
+    jq ".hosts += [$new_host]" $json_file >"temp.json" && mv "temp.json" $json_file
 }
 
-function confirm_action {
-    read -p "$1 [Y/N]" -n 1 -r REPLY
-    echo ""
-    case $REPLY in
-    [Yy]*)
-        return 0
-        ;;
-    [Nn]*)
-        echo "Aborting..."
-        exit 1
-        ;;
-    *) echo "Please enter y or n." ;;
-    esac
-}
-
-function check_host {
-    if [ -z "$HOST" ]; then
-        echo "No HOST parameter specified"
-        exit 1
+function add_host_redirection {
+    exists=$(getent hosts $1)
+    if [ -z "$exists" ]; then
+        echo "Adding localhost redirection for \"$1\""
+        echo "127.0.0.1 $1" | sudo tee -a /etc/hosts >/dev/null
+    else
+        echo "Host \"$1\" already exists"
     fi
 }
 
@@ -125,103 +132,114 @@ function build_webconf {
     $DC up -d nginx
 }
 
-function add_host_config {
-    program_installed jq || return 1
+function build_service {
+    local service=""
+    local flag=""
 
-    host_type="${1:-wordpress}"
-    if [ "$host_type" == "wordpress" ]; then
-        db_name="$(root_domain $HOST)_wp"
+    for arg in "$@"; do
+        if [[ $arg == "--no-cache" ]]; then
+            flag="--no-cache"
+        else
+            service="$arg"
+        fi
+    done
+
+    if [ -z "$service" ]; then
+        $DC build $flag --parallel
+        $DC up -d --force-recreate
     else
-        db_name="$(root_domain $HOST)_db"
+        $DC build $flag $service
+        $DC up --force-recreate -d $service
     fi
+}
 
-    json_file="$WEB_ROOT/dev/web-hosts.json"
+function check_host {
+    if [ -z "$HOST" ]; then
+        echo "No HOST parameter specified"
+        exit 1
+    fi
+}
 
-    # Check if the host already exists in the json file
-    existing_host=$(jq -r --arg hn "$HOST" '.hosts[] | select(.name == $hn)' $json_file)
-    if [ -n "$existing_host" ]; then
-        echo "Error: Host $HOST already exists in the JSON file." >&2
+function confirm_action {
+    read -p "$1 [Y/N]" -n 1 -r REPLY
+    echo ""
+    case $REPLY in
+    [Yy]*)
+        return 0
+        ;;
+    [Nn]*)
+        echo "Aborting..."
+        exit 1
+        ;;
+    *) echo "Please enter y or n." ;;
+    esac
+}
+
+function gen_root_ssl() {
+    echo "Creating Root Certificate of Authority ..."
+    FILENAME="${1:-rootCA}"
+    openssl genrsa -des3 -passout pass:default -out "$CERTS_DIR/$FILENAME.key" 4096
+    openssl req -x509 -new -nodes -passin pass:default -key "$CERTS_DIR/$FILENAME.key" -sha256 -days 20480 -subj "/C=GB/ST=London/L=London/O=Lyntouch/OU=IT Department/CN=Local Self Signed Certificate/emailAddress=info@lyntouch.com" -out "$CERTS_DIR/$FILENAME.crt"
+}
+
+function gen_host_ssl() {
+    if [ -z $HOST ]; then
+        echo "Host argument is required"
+        exit 1
+    fi
+    # echo current dir
+    pwd
+    extFile=$(gen_host_ssl_extfile $HOST)
+    openssl req -new -sha256 -nodes -out "/tmp/$HOST.csr" -newkey rsa:2048 -subj "/C=GB/ST=London/L=London/O=$HOST/OU=IT Department/CN=Lyntouch Self Signed Host/emailAddress=info@lyntouch.com" -keyout "$HOST.key"
+    openssl x509 -req -passin pass:default -in "/tmp/$HOST.csr" -CA "$ROOT_CRT" -CAkey "$ROOT_KEY" -CAcreateserial -out "$HOST.crt" -days 500 -sha256 -extfile <(printf "$extFile")
+    rm -f "/tmp/$HOST.csr"
+}
+
+function gen_host_ssl_extfile() {
+    domain=$1
+    cat <<EOF
+		authorityKeyIdentifier=keyid,issuer\n
+		basicConstraints=CA:FALSE\n
+		keyUsage=digitalSignature,nonRepudiation,keyEncipherment,dataEncipherment\n
+		subjectAltName = @alt_names\n
+		[alt_names]\n
+		DNS.1 = $domain
+EOF
+}
+
+function is_wsl() {
+    grep -q WSL /proc/version
+}
+
+function new_host {
+    local host=$1
+    local type=$2
+
+    if [ -z "$host" ] || [ -z "$type" ]; then
+        echo "Usage: web new-host <hostname> --wp|--laravel"
         return 1
     fi
 
-    # create new host object
-    new_host=$(jq -n \
-        --arg hn "$HOST" \
-        --arg ht "$host_type" \
-        --arg db "$db_name" \
-        '{name: $hn, type: $ht, db: $db}')
+    case "$type" in
+        --wp)
+            new_wp "$host"
+            ;;
+        --laravel)
+            new_laravel "$host"
+            ;;
+        *)
+            echo "Invalid type. Use --wp for WordPress or --laravel for Laravel."
+            return 1
+            ;;
+    esac
 
-    # add new host to the json file
-    jq ".hosts += [$new_host]" $json_file >"temp.json" && mv "temp.json" $json_file
-}
-
-function remove_host_config {
-    program_installed jq || return 1
-
-    json_file="$WEB_ROOT/dev/web-hosts.json"
-
-    # Check if the host exists in the json file
-    existing_host=$(jq -r --arg hn "$HOST" '.hosts[] | select(.name == $hn)' $json_file)
-    if [ -z "$existing_host" ]; then
-        echo "Error: Host $HOST does not exist in the JSON file." >&2
-        exit 1
-    fi
-
-    # Remove the host from the json file
-    jq --arg hn "$HOST" 'del(.hosts[] | select(.name == $hn))' $json_file >"temp.json" && mv "temp.json" $json_file
-}
-
-function add_host_redirection {
-    exists=$(getent hosts $1)
-    if [ -z "$exists" ]; then
-        echo "Adding localhost redirection for \"$1\""
-        echo "127.0.0.1 $1" | sudo tee -a /etc/hosts >/dev/null
+    add_host_config "$type" "$host"
+    if is_wsl; then
+        powershell.exe -Command "New-HostnameMapping $host"
     else
-        echo "Host \"$1\" already exists"
+        add_host_redirection "$host"
     fi
-}
-function remove_host_redirection {
-    if grep -q $1 /etc/hosts; then
-        sudo sed -i.bak "/$1/d" /etc/hosts
-        echo "Host redirection for \"$1\" removed"
-    else
-        echo "Host redirection for \"$1\" does not exist"
-    fi
-}
-
-function root_domain {
-    echo $1 | grep -oP '(.*?(?=\.\w{2,10}(\.\w{2,10})?$))'
-}
-
-function db_cmd {
-
-    pwd
-    action=$1
-    host_type=$2
-
-    domain=$(root_domain $HOST)
-
-    if [ "$host_type" == "wordpress" ]; then
-        db_name="${domain}_wp"
-    else
-        db_name="${domain}_db"
-    fi
-
-    if [ -z "$db_name" ]; then
-        echo "No DB name specified"
-        exit 1
-    fi
-
-    if [ $action == "create" ]; then
-        echo "Creating DB: $db_name"
-        $DC exec mariadb mysql -uroot -psecret -e "CREATE USER IF NOT EXISTS ${db_name}@'%' IDENTIFIED BY 'secret';"
-        $DC exec mariadb mysql -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS ${db_name};"
-        $DC exec mariadb mysql -uroot -psecret -e "GRANT ALL PRIVILEGES ON ${db_name}.* TO ${db_name}@'%'"
-    else
-        echo "Removing $db_name user and database"
-        $DC exec mariadb mysql -uroot -psecret -e "DROP DATABASE IF EXISTS ${db_name};"
-        $DC exec mariadb mysql -uroot -psecret -e "DROP USER IF EXISTS ${db_name}@'%';"
-    fi
+    build_webconf
 }
 
 function new_wp {
@@ -260,6 +278,94 @@ function new_wp {
     db_cmd create wordpress
 }
 
+function new_laravel {
+    local host=$1
+    echo "Setting up Laravel for $host..."
+
+    project_path="$WEB_ROOT/$host"
+    if [ ! -d "$project_path" ]; then
+        mkdir -p "$project_path"
+        composer create-project --prefer-dist laravel/laravel "$project_path"
+        # Additional Laravel-specific setup steps can be added here
+        # For example:
+        # cp "$project_path/.env.example" "$project_path/.env"
+        # php "$project_path/artisan" key:generate
+        # php "$project_path/artisan" storage:link
+    else
+        echo "Laravel project $project_path already exists, remove before continuing"
+        return 1
+    fi
+
+    # Setup Database
+    db_cmd create laravel
+}
+
+function program_installed {
+    if ! [ -x "$(command -v $1)" ]; then
+        echo "Error: $1 is not installed." >&2
+        return 1
+    fi
+}
+
+function root_domain {
+    echo $1 | grep -oP '(.*?(?=\.\w{2,10}(\.\w{2,10})?$))'
+}
+
+function remove_host_config {
+    program_installed jq || return 1
+
+    json_file="$WEB_ROOT/dev/web-hosts.json"
+
+    # Check if the host exists in the json file
+    existing_host=$(jq -r --arg hn "$HOST" '.hosts[] | select(.name == $hn)' $json_file)
+    if [ -z "$existing_host" ]; then
+        echo "Error: Host $HOST does not exist in the JSON file." >&2
+        exit 1
+    fi
+
+    # Remove the host from the json file
+    jq --arg hn "$HOST" 'del(.hosts[] | select(.name == $hn))' $json_file >"temp.json" && mv "temp.json" $json_file
+}
+
+function remove_host_redirection {
+    if grep -q $1 /etc/hosts; then
+        sudo sed -i.bak "/$1/d" /etc/hosts
+        echo "Host redirection for \"$1\" removed"
+    else
+        echo "Host redirection for \"$1\" does not exist"
+    fi
+}
+
+function db_cmd {
+    pwd
+    action=$1
+    host_type=$2
+
+    domain=$(root_domain $HOST)
+
+    if [ "$host_type" == "wordpress" ]; then
+        db_name="${domain}_wp"
+    else
+        db_name="${domain}_db"
+    fi
+
+    if [ -z "$db_name" ]; then
+        echo "No DB name specified"
+        exit 1
+    fi
+
+    if [ $action == "create" ]; then
+        echo "Creating DB: $db_name"
+        $DC exec mariadb mysql -uroot -psecret -e "CREATE USER IF NOT EXISTS ${db_name}@'%' IDENTIFIED BY 'secret';"
+        $DC exec mariadb mysql -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS ${db_name};"
+        $DC exec mariadb mysql -uroot -psecret -e "GRANT ALL PRIVILEGES ON ${db_name}.* TO ${db_name}@'%'"
+    else
+        echo "Removing $db_name user and database"
+        $DC exec mariadb mysql -uroot -psecret -e "DROP DATABASE IF EXISTS ${db_name};"
+        $DC exec mariadb mysql -uroot -psecret -e "DROP USER IF EXISTS ${db_name}@'%';"
+    fi
+}
+
 function import_ROOT_KEY_to_chrome() {
     cert_filename=$1
     cert_nickname=${2:-"Root CA"}
@@ -280,59 +386,6 @@ function import_ROOT_KEY_to_chrome() {
 
     certutil -d sql:$cert_dir -A -t "C,," -n "$cert_nickname" -i "${cert_filename}.der"
     echo "Certificate ${cert_filename}.der imported to Chrome with nickname $cert_nickname"
-}
-
-function gen_root_ssl() {
-    echo "Creating Root Certificate of Authority ..."
-    FILENAME="${1:-rootCA}"
-    openssl genrsa -des3 -passout pass:default -out "$CERTS_DIR/$FILENAME.key" 4096
-    openssl req -x509 -new -nodes -passin pass:default -key "$CERTS_DIR/$FILENAME.key" -sha256 -days 20480 -subj "/C=GB/ST=London/L=London/O=Lyntouch/OU=IT Department/CN=Local Self Signed Certificate/emailAddress=info@lyntouch.com" -out "$CERTS_DIR/$FILENAME.crt"
-}
-
-function gen_host_ssl() {
-    if [ -z $HOST ]; then
-        echo "Host argument is required"
-        exit 1
-    fi
-    # echo current dir
-    pwd
-    extFile=$(gen_host_ssl_extfile $HOST)
-    openssl req -new -sha256 -nodes -out "/tmp/$HOST.csr" -newkey rsa:2048 -subj "/C=GB/ST=London/L=London/O=$HOST/OU=IT Department/CN=Lyntouch Self Signed Host/emailAddress=info@lyntouch.com" -keyout "$HOST.key"
-    openssl x509 -req -passin pass:default -in "/tmp/$HOST.csr" -CA "$ROOT_CRT" -CAkey "$ROOT_KEY" -CAcreateserial -out "$HOST.crt" -days 500 -sha256 -extfile <(printf "$extFile")
-    rm -f "/tmp/$HOST.csr"
-}
-
-function gen_host_ssl_extfile() {
-    domain=$1
-    cat <<EOF
-		authorityKeyIdentifier=keyid,issuer\n
-		basicConstraints=CA:FALSE\n
-		keyUsage=digitalSignature,nonRepudiation,keyEncipherment,dataEncipherment\n
-		subjectAltName = @alt_names\n
-		[alt_names]\n
-		DNS.1 = $domain
-EOF
-}
-
-function build_service {
-    local service=""
-    local flag=""
-
-    for arg in "$@"; do
-        if [[ $arg == "--no-cache" ]]; then
-            flag="--no-cache"
-        else
-            service="$arg"
-        fi
-    done
-
-    if [ -z "$service" ]; then
-        $DC build $flag --parallel
-        $DC up -d --force-recreate
-    else
-        $DC build $flag $service
-        $DC up --force-recreate -d $service
-    fi
 }
 
 case "$CMD" in
@@ -386,16 +439,11 @@ install)
 log)
     $DC logs -f $2
     ;;
+new-host)
+    new_host "$HOST" "$2"
+    ;;
 new-wp)
-    root=$(root_domain $HOST)
-    new_wp $HOST
-    add_host_config wordpress
-    if is_wsl; then
-        powershell.exe -Command "New-HostnameMapping $HOST"
-    else
-        add_host_redirection $HOST
-    fi
-    build_webconf
+    new_host "$HOST" "--wp"
     ;;
 ps)
     $DC ps $2
