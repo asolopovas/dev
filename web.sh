@@ -128,7 +128,7 @@ function build_webconf {
 
     echo "Web Config Rebuild"
     $DC stop nginx && $DC rm -f nginx
-    docker volume rm dev_ssl
+    docker volume rm dev_ssl > /dev/null
     $DC up -d nginx
 }
 
@@ -252,7 +252,7 @@ function new_wp {
     if [ ! -d "$project_path" ]; then
         mkdir -p "$project_path"
         mkdir -p ./tmp_dir
-        echo green "Extracting Wordpress"
+        printf green "Extracting Wordpress"
         tar -xzf "$WEB_ROOT/wordpress.tar.gz" -C ./tmp_dir
         rm -rf ./tmp_dir/wordpress/wp-content/themes/twenty*
         mv ./tmp_dir/wordpress/* "$project_path"
@@ -271,8 +271,8 @@ function new_wp {
     [ ! -f $dest_conf ] && mv $sample_conf $dest_conf
     sed -i "s/username_here/$username/g;s/database_name_here/$username/g;s/password_here/$password/g;s/localhost/mariadb/g;" $dest_conf
 
-    # Setup Database
-    db_cmd create wordpress $host
+    # # Setup Database
+    # db_cmd create wordpress
 }
 
 function new_laravel {
@@ -471,6 +471,7 @@ remove-host)
     rm -rf $WEB_ROOT/$HOST
 
     if is_wsl; then
+        echo "removing wsl hosts redirection \n"
         powershell.exe -Command "Remove-HostnameMapping $HOST"
     else
         remove_host_redirection $HOST
