@@ -41,7 +41,7 @@ function add_host_config {
     # Check if the host already exists in the json file
     existing_host=$(jq -r --arg hn "$HOST" '.hosts[] | select(.name == $hn)' $json_file)
     if [ -n "$existing_host" ]; then
-        echo "Error: Host $HOST already exists in the JSON file." >&2
+        echo "Host $HOST already exists in the JSON file." >&2
         return 1
     fi
 
@@ -212,34 +212,31 @@ function is_wsl() {
 }
 
 function new_host {
-    local host=$1
-    local type=$2
-
-    if [ -z "$host" ] || [ -z "$type" ]; then
-        echo "Usage: web new-host <hostname> --wp|--laravel"
+    if [ -z "$HOST" ]; then
+        echo "Usage: web new-host <hostname> [-t wp|laravel]"
         return 1
     fi
 
-    case "$type" in
-        --wp)
-            new_wp "$host"
+    case "$TYPE" in
+        wp)
+            new_wp "$HOST"
             ;;
-        --laravel)
-            new_laravel "$host"
+        laravel)
+            new_laravel "$HOST"
             ;;
         *)
-            echo "Invalid type. Use --wp for WordPress or --laravel for Laravel."
+            echo "Invalid type. Use wp for WordPress or laravel for Laravel."
             return 1
             ;;
     esac
 
-    add_host_config "$type" "$host"
-    if is_wsl; then
-        powershell.exe -Command "New-HostnameMapping $host"
-    else
-        add_host_redirection "$host"
-    fi
-    build_webconf
+#     add_host_config "$TYPE" "$HOST"
+#     if is_wsl; then
+#         powershell.exe -Command "New-HostnameMapping $HOST"
+#    else
+#         add_host_redirection "$HOST"
+#     fi
+#     build_webconf
 }
 
 function new_wp {
@@ -275,11 +272,11 @@ function new_wp {
     sed -i "s/username_here/$username/g;s/database_name_here/$username/g;s/password_here/$password/g;s/localhost/mariadb/g;" $dest_conf
 
     # Setup Database
-    db_cmd create wordpress
+    db_cmd create wordpress $host
 }
 
 function new_laravel {
-    local host=$1
+    local HOST=$1
     echo "Setting up Laravel for $host..."
 
     project_path="$WEB_ROOT/$host"
@@ -298,6 +295,26 @@ function new_laravel {
 
     # Setup Database
     db_cmd create laravel
+}
+
+function parse_args() {
+    HOST=$1
+    shift
+    TYPE="wp"
+
+    while getopts ":t:" opt; do
+        case ${opt} in
+            t )
+                TYPE=$OPTARG
+                ;;
+            \? )
+                echo "Invalid option: $OPTARG" 1>&2
+                ;;
+            : )
+                echo "Invalid option: $OPTARG requires an argument" 1>&2
+                ;;
+        esac
+    done
 }
 
 function program_installed {
@@ -337,7 +354,6 @@ function remove_host_redirection {
 }
 
 function db_cmd {
-    pwd
     action=$1
     host_type=$2
 
@@ -440,10 +456,9 @@ log)
     $DC logs -f $2
     ;;
 new-host)
-    new_host "$HOST" "$2"
-    ;;
-new-wp)
-    new_host "$HOST" "--wp"
+    shift  # remove the 'new-host' argument
+    parse_args "$@"
+    new_host
     ;;
 ps)
     $DC ps $2
