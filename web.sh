@@ -484,7 +484,6 @@ remove-host)
 
     if is_wsl; then
         echo "removing wsl hosts redirection \n"
-        echo "Remove-HostnameMapping $HOST"
         powershell.exe -Command "Remove-HostnameMapping $HOST"
     else
         remove_host_redirection $HOST
