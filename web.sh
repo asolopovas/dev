@@ -263,12 +263,16 @@ function new_wp {
     fi
 
     # Setup Wordpress Config
+    root=$(root_domain $HOST)
     username=$root"_wp"
     password="secret"
     sample_conf=$project_path/wp-config-sample.php
     dest_conf=$project_path/wp-config.php
 
     [ ! -f $dest_conf ] && mv $sample_conf $dest_conf
+    echo $username
+    echo $password
+
     sed -i "s/username_here/$username/g;s/database_name_here/$username/g;s/password_here/$password/g;s/localhost/mariadb/g;" $dest_conf
 
     # # Setup Database
@@ -480,6 +484,7 @@ remove-host)
 
     if is_wsl; then
         echo "removing wsl hosts redirection \n"
+        echo "Remove-HostnameMapping $HOST"
         powershell.exe -Command "Remove-HostnameMapping $HOST"
     else
         remove_host_redirection $HOST
