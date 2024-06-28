@@ -356,13 +356,13 @@ function db_cmd {
 
     if [ $action == "create" ]; then
         echo "Creating DB: $db_name"
-        $DC exec mariadb mysql -uroot -psecret -e "CREATE USER IF NOT EXISTS ${db_name}@'%' IDENTIFIED BY 'secret';"
-        $DC exec mariadb mysql -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS ${db_name};"
-        $DC exec mariadb mysql -uroot -psecret -e "GRANT ALL PRIVILEGES ON ${db_name}.* TO ${db_name}@'%'"
+        $DC exec mariadb mariadb -uroot -psecret -e "CREATE USER IF NOT EXISTS ${db_name}@'%' IDENTIFIED BY 'secret';"
+        $DC exec mariadb mariadb -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS ${db_name};"
+        $DC exec mariadb mariadb -uroot -psecret -e "GRANT ALL PRIVILEGES ON ${db_name}.* TO ${db_name}@'%'"
     else
         echo "Removing $db_name user and database"
-        $DC exec mariadb mysql -uroot -psecret -e "DROP DATABASE IF EXISTS ${db_name};"
-        $DC exec mariadb mysql -uroot -psecret -e "DROP USER IF EXISTS ${db_name}@'%';"
+        $DC exec mariadb mariadb -uroot -psecret -e "DROP DATABASE IF EXISTS ${db_name};"
+        $DC exec mariadb mariadb -uroot -psecret -e "DROP USER IF EXISTS ${db_name}@'%';"
     fi
 }
 
