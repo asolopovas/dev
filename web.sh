@@ -230,13 +230,13 @@ function new_host {
             ;;
     esac
 
-#     add_host_config "$TYPE" "$HOST"
-#     if is_wsl; then
-#         powershell.exe -Command "New-HostnameMapping $HOST"
-#    else
-#         add_host_redirection "$HOST"
-#     fi
-#     build_webconf
+    add_host_config "$TYPE" "$HOST"
+    if is_wsl; then
+        powershell.exe -Command "New-HostnameMapping $HOST"
+   else
+        add_host_redirection "$HOST"
+    fi
+    build_webconf
 }
 
 function new_wp {
