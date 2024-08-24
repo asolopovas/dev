@@ -41,9 +41,9 @@ RUN mkdir -p /var/cache/nginxfastcgi; \
 
 # various
 COPY scripts/* /usr/local/bin
-COPY --chown=${UID}:${GID} certs/* /etc/letsencrypt/live
-COPY --chown=${UID}:${GID} nginx.conf /etc/nginx
-COPY --chown=${UID}:${GID} sites/* /tmp
+COPY --chown=${UID}:${GID} certs/* /etc/letsencrypt/live/
+COPY --chown=${UID}:${GID} nginx.conf cors.conf cross-origin.conf /etc/nginx/
+COPY --chown=${UID}:${GID} sites/* /tmp/
 
 RUN touch /var/run/nginx.pid && chown ${UID}:${GID} /var/run/nginx.pid;
 
