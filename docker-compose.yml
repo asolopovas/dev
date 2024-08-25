@@ -1,6 +1,5 @@
 volumes:
     ssl:
-    livereload:
     db:
     phpmyadmin:
 
@@ -45,7 +44,6 @@ services:
             XDEBUG_HOST: ${XDEBUG_HOST}
             XDEBUG_IDEKEY: ${XDEBUG_IDEKEY}
             XDEBUG_TRIGGER: ${XDEBUG_TRIGGER}
-            LIVERELOAD: ${LIVERELOAD}
             WORKDIR: ${WORKDIR}
         ports:
             - 35729:35729
@@ -79,7 +77,6 @@ services:
             - ./nginx/sites:/etc/nginx/sites-available
             - ./nginx/extras:/etc/nginx/extras
             - ssl:/etc/letsencrypt/live
-            - livereload:/var/www/livereload
             - phpmyadmin:/var/www/html
         environment:
             - WORKDIR=${WORKDIR}

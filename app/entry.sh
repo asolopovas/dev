@@ -30,14 +30,6 @@ if ! crond -d 2; then
     exit 1
 fi
 
-if [ "$LIVERELOAD" = 'true' ]; then
-    # source "$NVM_DIR/nvm.sh"
-    PNPM_HOME="$HOME/.local/share/pnpm"
-    PATH=$PATH:$PNPM_HOME
-    pnpm add -g livereload
-    livereload --port 35729 --exts "js,ts,php,twig,html" --exclusions node_modules/,vendor/ "${WORKDIR}" &
-fi
-
 if [ ! -f "$HOME/.local/bin/wp" ]; then
     curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar || {
         echo "Download failed"
