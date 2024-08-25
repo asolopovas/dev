@@ -36,8 +36,7 @@ RUN for dir in \
 # Misc setups
 RUN mkdir -p /var/cache/nginxfastcgi; \
     chown -R ${UID}:${GID} /var/cache/nginxfastcgi; \
-    touch /var/log/messages; \
-    echo "0 */12 * * * certbot renew -q --nginx --deploy-hook 'nginx -s reload'" >> /etc/crontabs/root
+    touch /var/log/messages;
 
 # various
 COPY scripts/* /usr/local/bin
