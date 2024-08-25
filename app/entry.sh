@@ -5,7 +5,6 @@ source $HOME/.bashrc
 echo "*************************************************"
 echo "APP_ENV: $APP_ENV"
 echo "APP_DEBUG: $APP_DEBUG"
-echo "LIVERELOAD: $LIVERELOAD"
 echo "NVM_DIR: $NVM_DIR"
 echo "WORKDIR: $WORKDIR"
 echo "GOPATH: $GOPATH"
