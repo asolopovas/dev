@@ -12,7 +12,12 @@
             "port": 9003,
             "pathMappings": {
                 "/var/www/${HOSTNAME}/": "${workspaceFolder}"
-            }
+            },
+            "xdebugSettings": {
+                "max_children": 128,
+                "max_data": -1,
+                "max_depth": 3
+            },
         }
     ]
 }
