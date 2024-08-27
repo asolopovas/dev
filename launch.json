@@ -17,7 +17,7 @@
                 "max_children": 128,
                 "max_data": -1,
                 "max_depth": 3
-            },
+            }
         }
     ]
 }
