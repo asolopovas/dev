@@ -46,7 +46,6 @@ services:
             XDEBUG_TRIGGER: ${XDEBUG_TRIGGER}
             WORKDIR: ${WORKDIR}
         ports:
-            - 35729:35729
             - 25:25
         networks:
             - nginx
