@@ -39,7 +39,7 @@ RUN apk add --no-cache \
     logrotate \
     libstdc++
 
-RUN echo "fs.inotify.max_user_instances=224288" >> /etc/sysctl.conf
+RUN echo "fs.inotify.max_user_instances=24288" >> /etc/sysctl.conf
 RUN ln -sf /bin/bash /bin/sh
 
 USER ${APP_USER}
