@@ -302,23 +302,24 @@ function new_laravel {
 }
 
 function parse_args() {
-    HOST=$1
-    shift
     TYPE="wp"
-
-    while getopts ":t:" opt; do
-        case ${opt} in
-            t )
-                TYPE=$OPTARG
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -t)
+                TYPE=$2
+                shift 2
                 ;;
-            \? )
-                echo "Invalid option: $OPTARG" 1>&2
-                ;;
-            : )
-                echo "Invalid option: $OPTARG requires an argument" 1>&2
+            *)
+                HOST=$1
+                shift
                 ;;
         esac
     done
+
+    if [ -z "$HOST" ]; then
+        echo "No HOST parameter specified"
+        exit 1
+    fi
 }
 
 function program_installed {
@@ -543,7 +544,7 @@ Allowed options:
         Link the web.sh script to your local binary directory for easier access.
     - log {service}:
         Show the logs of the specified or all Docker Compose service(s).
-    - new-wp {host}:
+    - new-host {host}:
         Set up a new WordPress site for the given host.
     - ps {service}:
         List Docker Compose service(s) status.
