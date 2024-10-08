@@ -207,6 +207,8 @@ function gen_host_ssl_extfile() {
 		DNS.2 = *.test
         IP.1 = 127.0.0.1
         IP.2 = 192.168.1.10
+        IP.3 = 10.255.255.254
+        IP.4 = 172.30.77.153
 EOF
 }
 
