@@ -204,10 +204,9 @@ function gen_host_ssl_extfile() {
 		subjectAltName = @alt_names\n
 		[alt_names]\n
 		DNS.1 = $domain
-		DNS.2 = *.test
         IP.1 = 127.0.0.1
         IP.2 = 192.168.1.10
-        IP.3 = 192.168.1.222
+        IP.3 = 192.168.1.98
 EOF
 }
 
