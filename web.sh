@@ -96,7 +96,7 @@ function build_webconf {
         echo "          - $hostname" >>$yaml_file
     done
 
-    echo "" > $SCRIPT_DIR/crontab
+    echo "" >$SCRIPT_DIR/crontab
     # Loop through each host in the config file
     jq -c '.hosts[]' $config_path | while read i; do
         hostname=$(echo "$i" | jq -r '.name')
@@ -107,7 +107,7 @@ function build_webconf {
         site_conf="$SITES_DIR/$hostname.conf"
         debugout="$HOME/www/$hostname/.vscode"
 
-        echo "* * * * * cd /var/www/$hostname && php /var/www/$hostname/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2"  >> $SCRIPT_DIR/crontab
+        echo "* * * * * cd /var/www/$hostname && php /var/www/$hostname/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" >>$SCRIPT_DIR/crontab
 
         add_host "$hostname"
 
@@ -128,7 +128,7 @@ function build_webconf {
 
     echo "Web Config Rebuild"
     $DC stop nginx && $DC rm -f nginx
-    docker volume rm dev_ssl > /dev/null
+    docker volume rm dev_ssl >/dev/null
     $DC up -d nginx
 }
 
@@ -221,22 +221,22 @@ function new_host {
     fi
 
     case "$TYPE" in
-        wp)
-            new_wp "$HOST"
-            ;;
-        laravel)
-            new_laravel "$HOST"
-            ;;
-        *)
-            echo "Invalid type. Use wp for WordPress or laravel for Laravel."
-            return 1
-            ;;
+    wp)
+        new_wp "$HOST"
+        ;;
+    laravel)
+        new_laravel "$HOST"
+        ;;
+    *)
+        echo "Invalid type. Use wp for WordPress or laravel for Laravel."
+        return 1
+        ;;
     esac
 
     add_host_config "$TYPE" "$HOST"
     if is_wsl; then
         powershell.exe -Command "New-HostnameMapping $HOST"
-   else
+    else
         add_host_redirection "$HOST"
     fi
     build_webconf
@@ -308,14 +308,14 @@ function parse_args() {
     TYPE="wp"
     while [[ $# -gt 0 ]]; do
         case $1 in
-            -t)
-                TYPE=$2
-                shift 2
-                ;;
-            *)
-                HOST=$1
-                shift
-                ;;
+        -t)
+            TYPE=$2
+            shift 2
+            ;;
+        *)
+            HOST=$1
+            shift
+            ;;
         esac
     done
 
@@ -472,7 +472,7 @@ log)
     $DC logs -f $2
     ;;
 new-host)
-    shift  # remove the 'new-host' argument
+    shift # remove the 'new-host' argument
     parse_args "$@"
     new_host
     ;;
@@ -568,24 +568,23 @@ Allowed options:
     - up {service}:
         Up the specified or all Docker Compose service(s).
 
-Usage examples:
-    web install                    # Link web.sh script to local binary directory
-    cd ?$(web dir)                 # Change directory to the script directory
-    web bash                       # Access app service's bash using Docker Compose
-    web fish                       # Access app service's fish shell using Docker Compose
-    web build-webconf              # Rebuild the web server configuration
-    web build                      # Rebuild all Docker images and recreate all containers
-    web build --no-cache           # Rebuild all without cache Docker images and recreate all containers
-    web build app                  # Rebuild the app Docker image and recreate the app container
-    web build app --no-cache       # Rebuild the app without cache Docker image and recreate the app container
-    web restart                    # Restart the web server and rebuild the web server configuration
-    web ps                         # List all Docker Compose services
-    web ps app                     # List the app Docker Compose service
-    web new-wp example.com         # Set up a new WordPress site for example.com
-    web remove-host example.com    # Remove the host example.com and all associated configurations
-    web rootssl                    # Generate a root SSL certificate and import it to Chrome. Then rebuild the nginx service.
-    web hostssl example.com        # Generate an SSL certificate for the host example.com
-    web import-rootca              # Import the root Certificate Authority to Chrome
+Usage examples web {cmd}:
+    install                             # Link web.sh script to local binary directory
+    bash                                # Access app service's bash using Docker Compose
+    fish                                # Access app service's fish shell using Docker Compose
+    build-webconf                       # Rebuild the web server configuration
+    build                               # Rebuild all Docker images and recreate all containers
+    build --no-cache                    # Rebuild all without cache Docker images and recreate all containers
+    build app                           # Rebuild the app Docker image and recreate the app container
+    build app --no-cache                # Rebuild the app without cache Docker image and recreate the app container
+    restart                             # Restart the web server and rebuild the web server configuration
+    ps                                  # List all Docker Compose services
+    ps app                              # List the app Docker Compose service
+    new-host <hostname> [-t wp|laravel] # Set up a new WordPress site for example.com
+    remove-host example.com             # Remove the host example.com and all associated configurations
+    rootssl                             # Generate a root SSL certificate and import it to Chrome. Then rebuild the nginx service.
+    hostssl example.com                 # Generate an SSL certificate for the host example.com
+    import-rootca                       # Import the root Certificate Authority to Chrome
 EOF
     ;;
 esac
