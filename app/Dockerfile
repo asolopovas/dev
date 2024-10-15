@@ -60,13 +60,25 @@ COPY conf.d/* /usr/local/etc/php/conf.d
 RUN touch /var/log/entry.log; chown $APP_USER:$APP_USER /var/log/entry.log; chmod 700 /var/log/entry.log
 RUN ln -sf /bin/nvim /usr/local/bin/vim
 
-ARG NEW_RELIC_API_KEY=${NEW_RELIC_API_KEY}
-ARG NEW_RELIC_ACCOUNT_ID=${NEW_RELIC_ACCOUNT_ID}
-RUN curl -Ls https://download.newrelic.com/install/newrelic-cli/scripts/install.sh | bash \
-    && sudo \
-    NEW_RELIC_API_KEY=${NEW_RELIC_API_KEY} \
-    NEW_RELIC_ACCOUNT_ID=${NEW_RELIC_ACCOUNT_ID} NEW_RELIC_REGION=EU \
-    /usr/local/bin/newrelic install -n php-agent-installer
+ARG NR_VERSION=${NR_VERSION}
+ARG NR_USER_KEY=${NR_USER_KEY}
+ARG NR_INSTALL_KEY=${NR_INSTALL_KEY}
+ENV NR_USER_KEY=${NR_USER_KEY}
+ENV NR_INSTALL_KEY=${NR_INSTALL_KEY}
+
+RUN curl -s -o /tmp/newrelic-php5-${NR_VERSION}-linux-musl.tar.gz \
+     https://download.newrelic.com/php_agent/release/newrelic-php5-${NR_VERSION}-linux-musl.tar.gz
+RUN pushd /tmp && gzip -dc newrelic-php5-${NR_VERSION}-linux-musl.tar.gz | tar xf -
+RUN ls /tmp
+RUN pushd /tmp/newrelic-php5-${NR_VERSION}-linux-musl && \
+    NR_INSTALL_USE_CP_NOT_LN=1 \
+    NR_INSTALL_SILENT=true \
+    NR_INSTALL_KEY=${NR_INSTALL_KEY} \
+    ./newrelic-install install
+RUN sed -i \
+    -e "s/${NR_USER_KEY}/${NR_INSTALL_KEY}/g" \
+    -e "s/newrelic.appname[[:space:]]*=[[:space:]]*.*/newrelic.appname = \"wp_test\"/" \
+    /usr/local/etc/php/conf.d/newrelic.ini
 
 USER $APP_USER
 
