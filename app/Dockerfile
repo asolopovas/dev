@@ -60,6 +60,14 @@ COPY conf.d/* /usr/local/etc/php/conf.d
 RUN touch /var/log/entry.log; chown $APP_USER:$APP_USER /var/log/entry.log; chmod 700 /var/log/entry.log
 RUN ln -sf /bin/nvim /usr/local/bin/vim
 
+ARG NEW_RELIC_API_KEY=${NEW_RELIC_API_KEY}
+ARG NEW_RELIC_ACCOUNT_ID=${NEW_RELIC_ACCOUNT_ID}
+RUN curl -Ls https://download.newrelic.com/install/newrelic-cli/scripts/install.sh | bash \
+    && sudo \
+    NEW_RELIC_API_KEY=${NEW_RELIC_API_KEY} \
+    NEW_RELIC_ACCOUNT_ID=${NEW_RELIC_ACCOUNT_ID} NEW_RELIC_REGION=EU \
+    /usr/local/bin/newrelic install -n php-agent-installer
+
 USER $APP_USER
 
 ENTRYPOINT ["entry.sh"]

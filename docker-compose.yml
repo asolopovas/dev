@@ -14,6 +14,8 @@ services:
             args:
                 FZF: ${FZF}
                 FISH: ${FISH}
+                NEW_RELIC_API_KEY: ${NEW_RELIC_API_KEY}
+                NEW_RELIC_ACCOUNT_ID: ${NEW_RELIC_ACCOUNT_ID}
                 FDFIND: ${FDFIND}
                 PNPM_VERSION: ${PNPM_VERSION}
                 NODE: ${NODE}
