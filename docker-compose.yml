@@ -58,7 +58,6 @@ services:
                 max-size: "128m"
                 max-file: "1"
         # command: tail -f /dev/null
-
     nginx:
         extends:
             file: templates.yml

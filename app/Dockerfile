@@ -77,7 +77,7 @@ RUN pushd /tmp/newrelic-php5-${NR_VERSION}-linux-musl && \
     ./newrelic-install install
 RUN sed -i \
     -e "s/${NR_USER_KEY}/${NR_INSTALL_KEY}/g" \
-    -e "s/newrelic.appname[[:space:]]*=[[:space:]]*.*/newrelic.appname = \"wp_test\"/" \
+    -e "s/newrelic.appname[[:space:]]*=[[:space:]]*.*/newrelic.appname = \"wp_agent\"/" \
     /usr/local/etc/php/conf.d/newrelic.ini
 
 USER $APP_USER
