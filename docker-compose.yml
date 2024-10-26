@@ -112,11 +112,13 @@ services:
             - phpmyadmin:/var/www/html
         restart: always
         environment:
-            MAX_EXECUTION_TIME: 300
             PMA_HOST: ${DB_HOST}
             PMA_USER: "root"
             PMA_PASSWORD: "secret"
-            UPLOAD_LIMIT: 10048M
+            PMA_ARBITRARY: 1
+            UPLOAD_LIMIT: 10048M  # Large upload limit
+            MAX_EXECUTION_TIME: 600  # Increase execution time
+            MEMORY_LIMIT: 512M  # Set memory limit as needed
         networks:
             - nginx
 
