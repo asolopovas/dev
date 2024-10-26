@@ -112,6 +112,7 @@ services:
             - phpmyadmin:/var/www/html
         restart: always
         environment:
+            MAX_EXECUTION_TIME: 300
             PMA_HOST: ${DB_HOST}
             PMA_USER: "root"
             PMA_PASSWORD: "secret"
