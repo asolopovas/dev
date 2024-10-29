@@ -568,23 +568,24 @@ Allowed options:
     - up {service}:
         Up the specified or all Docker Compose service(s).
 
-Usage examples web {cmd}:
-    install                             # Link web.sh script to local binary directory
-    bash                                # Access app service's bash using Docker Compose
-    fish                                # Access app service's fish shell using Docker Compose
-    build-webconf                       # Rebuild the web server configuration
-    build                               # Rebuild all Docker images and recreate all containers
-    build --no-cache                    # Rebuild all without cache Docker images and recreate all containers
-    build app                           # Rebuild the app Docker image and recreate the app container
-    build app --no-cache                # Rebuild the app without cache Docker image and recreate the app container
-    restart                             # Restart the web server and rebuild the web server configuration
-    ps                                  # List all Docker Compose services
-    ps app                              # List the app Docker Compose service
-    new-host <hostname> [-t wp|laravel] # Set up a new WordPress site for example.com
-    remove-host example.com             # Remove the host example.com and all associated configurations
-    rootssl                             # Generate a root SSL certificate and import it to Chrome. Then rebuild the nginx service.
-    hostssl example.com                 # Generate an SSL certificate for the host example.com
-    import-rootca                       # Import the root Certificate Authority to Chrome
+Usage examples:
+    web install                              # Link web.sh script to local binary directory
+    cd ?$(web dir)                           # Change directory to the script directory
+    web bash                                 # Access app service's bash using Docker Compose
+    web fish                                 # Access app service's fish shell using Docker Compose
+    web build-webconf                        # Rebuild the web server configuration
+    web build                                # Rebuild all Docker images and recreate all containers
+    web build --no-cache                     # Rebuild all without cache Docker images and recreate all containers
+    web build app                            # Rebuild the app Docker image and recreate the app container
+    web build app --no-cache                 # Rebuild the app without cache Docker image and recreate the app container
+    web restart                              # Restart the web server and rebuild the web server configuration
+    web ps                                   # List all Docker Compose services
+    web ps app                               # List the app Docker Compose service
+    web new-host <hostname> [-t wp|laravel]  # Set up a new WordPress site for example.com
+    web remove-host example.com              # Remove the host example.com and all associated configurations
+    web rootssl                              # Generate a root SSL certificate and import it to Chrome. Then rebuild the nginx service.
+    web hostssl example.com                  # Generate an SSL certificate for the host example.com
+    web import-rootca                        # Import the root Certificate Authority to Chrome
 EOF
     ;;
 esac
