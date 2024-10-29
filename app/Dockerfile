@@ -39,7 +39,7 @@ RUN apk add --no-cache \
     logrotate \
     libstdc++
 
-RUN echo "fs.inotify.max_user_instances=24288" >> /etc/sysctl.conf
+RUN echo "fs.inotify.max_user_instances=10000" >> /etc/sysctl.conf
 RUN ln -sf /bin/bash /bin/sh
 
 USER ${APP_USER}
@@ -47,9 +47,6 @@ USER ${APP_USER}
 ARG FISH=${FISH} OHMYFISH=${OHMYFISH} FZF=${FZF} FDFIND=${FDFIND} NVIM=${NVIM} OHMYBASH=${OHMYBASH} NODE=${NODE} NODE_VERSION=${NODE_VERSION}
 RUN FISH=${FISH} OHMYFISH=${OHMYFISH} FZF=${FZF} FDFIND=${FDFIND} NVIM=${NVIM} OHMYBASH=${OHMYBASH} NODE=${NODE} NODE_VERSION=${NODE_VERSION} UNATTENDED=true \
     bash -c "$(curl -fsSLH 'Cache-Control: no-cache' http://raw.githubusercontent.com/asolopovas/dotfiles/master/init.sh)"
-
-# RUN mkdir -p ${HOME}/.local/bin; curl -s http://getcomposer.org/installer | php -- --install-dir=${HOME}/.local/bin --filename=composer
-# RUN curl -fsSL https://get.pnpm.io/install.sh | PNPM_VERSION=${PNPM_VERSION} ENV="$HOME/.bashrc" SHELL="$(which bash)" bash -
 
 USER root
 COPY config/msmtprc /etc/msmtprc
@@ -59,26 +56,6 @@ RUN chmod 4755 /usr/bin/crontab
 COPY conf.d/* /usr/local/etc/php/conf.d
 RUN touch /var/log/entry.log; chown $APP_USER:$APP_USER /var/log/entry.log; chmod 700 /var/log/entry.log
 RUN ln -sf /bin/nvim /usr/local/bin/vim
-
-ARG NR_VERSION=${NR_VERSION}
-ARG NR_USER_KEY=${NR_USER_KEY}
-ARG NR_INSTALL_KEY=${NR_INSTALL_KEY}
-ENV NR_USER_KEY=${NR_USER_KEY}
-ENV NR_INSTALL_KEY=${NR_INSTALL_KEY}
-
-RUN curl -s -o /tmp/newrelic-php5-${NR_VERSION}-linux-musl.tar.gz \
-     https://download.newrelic.com/php_agent/release/newrelic-php5-${NR_VERSION}-linux-musl.tar.gz
-RUN pushd /tmp && gzip -dc newrelic-php5-${NR_VERSION}-linux-musl.tar.gz | tar xf -
-RUN ls /tmp
-RUN pushd /tmp/newrelic-php5-${NR_VERSION}-linux-musl && \
-    NR_INSTALL_USE_CP_NOT_LN=1 \
-    NR_INSTALL_SILENT=true \
-    NR_INSTALL_KEY=${NR_INSTALL_KEY} \
-    ./newrelic-install install
-RUN sed -i \
-    -e "s/${NR_USER_KEY}/${NR_INSTALL_KEY}/g" \
-    -e "s/newrelic.appname[[:space:]]*=[[:space:]]*.*/newrelic.appname = \"wp_agent\"/" \
-    /usr/local/etc/php/conf.d/newrelic.ini
 
 USER $APP_USER
 
