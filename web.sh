@@ -207,6 +207,7 @@ function gen_host_ssl_extfile() {
         IP.1 = 127.0.0.1
         IP.2 = 192.168.1.10
         IP.3 = 192.168.1.98
+        IP.4 = 192.168.1.222
 EOF
 }
 
@@ -222,7 +223,7 @@ function new_host {
 
     case "$TYPE" in
     wp)
-        new_wp "$HOST"
+        # new_wp "$HOST"
         ;;
     laravel)
         new_laravel "$HOST"
@@ -284,9 +285,10 @@ function new_wp {
 
 function new_laravel {
     local HOST=$1
-    echo "Setting up Laravel for $host..."
+    echo "Setting up Laravel for $HOST..."
 
-    project_path="$WEB_ROOT/$host"
+    project_path="$WEB_ROOT/$HOST"
+    echo $project_path
     if [ ! -d "$project_path" ]; then
         mkdir -p "$project_path"
         composer create-project --prefer-dist laravel/laravel "$project_path"
@@ -300,8 +302,8 @@ function new_laravel {
         return 1
     fi
 
-    # Setup Database
-    db_cmd create laravel
+    # # Setup Database
+    # db_cmd create laravel
 }
 
 function parse_args() {
