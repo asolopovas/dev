@@ -84,6 +84,8 @@ services:
         # command: tail -f /dev/null
 
     mariadb:
+        build:
+            context: ./mariadb
         image: mariadb:lts
         restart: always
         environment:
