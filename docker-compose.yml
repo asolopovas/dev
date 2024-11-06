@@ -43,7 +43,6 @@ services:
             XDEBUG_MODE: ${XDEBUG_MODE}
             XDEBUG_HOST: ${XDEBUG_HOST}
             XDEBUG_IDEKEY: ${XDEBUG_IDEKEY}
-            XDEBUG_TRIGGER: ${XDEBUG_TRIGGER}
             WORKDIR: ${WORKDIR}
         ports:
             - 25:25
