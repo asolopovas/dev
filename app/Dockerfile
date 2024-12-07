@@ -1,4 +1,4 @@
-FROM asolopovas/php-fpm:1.2-php82
+FROM asolopovas/php-fpm:1.3
 ARG APP_USER=www
 ARG WORKDIR=/var/www
 ARG PNPM_VERSION=${PNPM_VERSION}
