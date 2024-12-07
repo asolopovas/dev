@@ -1,4 +1,10 @@
+FROM surnet/alpine-wkhtmltopdf:3.18.0-0.12.6-small as wkhtmltopdf
+
 FROM asolopovas/php-fpm:1.3
+
+COPY --from=wkhtmltopdf /bin/wkhtmltopdf /bin/wkhtmltopdf
+COPY --from=wkhtmltopdf /bin/libwkhtmltox* /bin/
+
 ARG APP_USER=www
 ARG WORKDIR=/var/www
 ARG PNPM_VERSION=${PNPM_VERSION}
