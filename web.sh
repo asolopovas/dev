@@ -31,9 +31,9 @@ function add_host_config {
 
     host_type="${1:-wordpress}"
     if [ "$host_type" == "wordpress" ]; then
-        db_name="$(root_domain $HOST)_wp"
+        db_name="$(echo $(root_domain $HOST) | tr '.' '_')_wp"
     else
-        db_name="$(root_domain $HOST)_db"
+        db_name="$(echo $(root_domain $HOST) | tr '.' '_')_db"
     fi
 
     json_file="$WEB_ROOT/dev/web-hosts.json"
