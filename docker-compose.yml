@@ -27,8 +27,6 @@ services:
         working_dir: ${WORKDIR}
         extra_hosts:
             - "host.docker.internal:host-gateway"
-        # dns:
-        #     8.8.8.8
         volumes:
             - ./app/entry.sh:/usr/local/bin/entry.sh
             - ./crontab:/etc/crontabs/www
