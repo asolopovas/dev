@@ -257,7 +257,6 @@ function new_wp {
         mkdir -p ./tmp_dir
         print_color green "Extracting Wordpress"
         tar -xzf "$WEB_ROOT/wordpress.tar.gz" -C ./tmp_dir
-        rm -rf ./tmp_dir/wordpress/wp-content/themes/twenty*
         mv ./tmp_dir/wordpress/* "$project_path"
         rm -rf ./tmp_dir
     else
