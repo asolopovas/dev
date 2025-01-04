@@ -222,7 +222,7 @@ function new_host {
 
     case "$TYPE" in
     wp)
-        # new_wp "$HOST"
+        new_wp "$HOST"
         ;;
     laravel)
         new_laravel "$HOST"
@@ -279,7 +279,7 @@ function new_wp {
     sed -i "s/username_here/$username/g;s/database_name_here/$username/g;s/password_here/$password/g;s/localhost/mariadb/g;" $dest_conf
 
     # # Setup Database
-    # db_cmd create wordpress
+    db_cmd create wordpress
 }
 
 function new_laravel {
