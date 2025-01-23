@@ -206,7 +206,7 @@ function gen_host_ssl_extfile() {
 		DNS.1 = $domain
         IP.1 = 127.0.0.1
         IP.2 = 192.168.0.16
-        IP.3 = 192.168.1.98
+        IP.3 = 192.168.1.222
 EOF
 }
 
