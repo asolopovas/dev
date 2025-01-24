@@ -1,9 +1,8 @@
-FROM surnet/alpine-wkhtmltopdf:3.18.0-0.12.6-small as wkhtmltopdf
+FROM docker.io/surnet/alpine-wkhtmltopdf:3.21.2-0.12.6-small as wkhtmltopdf
 
 FROM asolopovas/php-fpm:1.3
 
 COPY --from=wkhtmltopdf /bin/wkhtmltopdf /bin/wkhtmltopdf
-COPY --from=wkhtmltopdf /bin/libwkhtmltox* /bin/
 
 ARG APP_USER=www
 ARG WORKDIR=/var/www
@@ -50,7 +49,14 @@ RUN ln -sf /bin/bash /bin/sh
 
 USER ${APP_USER}
 
-ARG FISH=${FISH} OHMYFISH=${OHMYFISH} FZF=${FZF} FDFIND=${FDFIND} NVIM=${NVIM} OHMYBASH=${OHMYBASH} NODE=${NODE} NODE_VERSION=${NODE_VERSION}
+ARG FISH=${FISH}
+ARG OHMYFISH=${OHMYFISH}
+ARG FZF=${FZF}
+ARG FDFIND=${FDFIND}
+ARG NVIM=${NVIM}
+ARG OHMYBASH=${OHMYBASH}
+ARG NODE=${NODE}
+ARG NODE_VERSION=${NODE_VERSION}
 RUN FISH=${FISH} OHMYFISH=${OHMYFISH} FZF=${FZF} FDFIND=${FDFIND} NVIM=${NVIM} OHMYBASH=${OHMYBASH} NODE=${NODE} NODE_VERSION=${NODE_VERSION} UNATTENDED=true \
     bash -c "$(curl -fsSLH 'Cache-Control: no-cache' http://raw.githubusercontent.com/asolopovas/dotfiles/master/init.sh)"
 
