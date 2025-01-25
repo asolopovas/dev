@@ -1,4 +1,4 @@
-FROM docker.io/surnet/alpine-wkhtmltopdf:3.21.2-0.12.6-small as wkhtmltopdf
+FROM surnet/alpine-wkhtmltopdf:3.21.2-0.12.6-small as wkhtmltopdf
 
 FROM asolopovas/php-fpm:1.3
 
@@ -10,8 +10,8 @@ ARG PNPM_VERSION=${PNPM_VERSION}
 ARG HOME=/home/${APP_USER}
 ARG NVM_NODEJS_ORG_MIRROR=${NVM_NODEJS_ORG_MIRROR}
 ENV APP_USER=${APP_USER}
-ENV WORKDIR ${WORKDIR}
-ENV HOME ${HOME}
+ENV WORKDIR=${WORKDIR}
+ENV HOME=${HOME}
 ENV NVM_NODEJS_ORG_MIRROR=${NVM_NODEJS_ORG_MIRROR}
 WORKDIR ${WORKDIR}
 
