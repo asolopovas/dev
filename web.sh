@@ -207,6 +207,7 @@ function gen_host_ssl_extfile() {
         IP.1 = 127.0.0.1
         IP.2 = 192.168.0.16
         IP.3 = 192.168.1.222
+        IP.4 = 192.168.0.19
 EOF
 }
 
