@@ -21,6 +21,9 @@ RUN docker-php-ext-install \
     exif \
     mbstring \
     mysqli \
+    pdo \
+    pdo_mysql \
+    pdo_pgsql \
     pdo_sqlite \
     pcntl \
     xml \
