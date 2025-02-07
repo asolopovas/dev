@@ -1,0 +1,76 @@
+FROM dunglas/frankenphp:1.4.2-builder-php8.3.16
+RUN apt-get update && apt-get install -y \
+    git \
+    unzip \
+    wget \
+    curl \
+    libavif-dev \
+    libfreetype6-dev \
+    libjpeg-dev \
+    libmemcached-dev \
+    libpq-dev \
+    libpng-dev \
+    libwebp-dev \
+    libzip-dev \
+    imagemagick \
+    libmagickwand-dev
+
+RUN docker-php-ext-install \
+    bcmath \
+    calendar \
+    exif \
+    mbstring \
+    mysqli \
+    pdo_sqlite \
+    pcntl \
+    xml \
+    zip
+
+RUN docker-php-ext-configure intl && docker-php-ext-install intl && docker-php-ext-enable intl
+RUN docker-php-ext-configure gd \
+    --with-freetype \
+    --with-jpeg \
+    --with-avif \
+    --with-webp
+RUN docker-php-ext-install gd
+
+# Install PECL and PEAR extensions
+RUN pecl install imagick && docker-php-ext-enable imagick
+RUN pecl install xdebug && docker-php-ext-enable xdebug
+RUN pecl install swoole && docker-php-ext-enable swoole
+RUN pecl install redis && docker-php-ext-enable redis
+RUN pecl install apcu && docker-php-ext-enable apcu
+RUN pecl install igbinary && docker-php-ext-enable igbinary
+
+ARG UID=1000
+ARG GID=1000
+ARG APP_USER=app
+ENV APP_USER=${APP_USER}
+
+# User configuration
+RUN \
+    groupadd -g ${GID} ${APP_USER} || true; \
+    useradd -m -u ${UID} -g ${GID} -s /bin/bash ${APP_USER}; \
+    setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
+    chown -R ${UID}:${GID} /data/caddy /config/caddy
+
+RUN apt-get install -y fish neovim sudo
+RUN mkdir /etc/sudoers.d; \
+    echo "$APP_USER ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${APP_USER}; \
+    chmod 0440 /etc/sudoers.d/${APP_USER}; \
+    echo "Set disable_coredump false" > /etc/sudo.conf
+
+ENV VOLTA_HOME /home/${APP_USER}/.volta
+ENV PATH $VOLTA_HOME/bin:$PATH
+ENV XDG_DATA_HOME=/home/${APP_USER}/.local/share
+ENV XDG_CONFIG_HOME=/home/${APP_USER}/.config
+ENV XDG_CACHE_HOME=/home/${APP_USER}/.cache
+
+COPY conf.d/  /usr/local/etc/php/conf.d/
+COPY php-env.sh entrypoint.sh /usr/local/bin/
+
+USER ${UID}:${GID}
+
+RUN NODE_VERSION=${NODE_VERSION} bash -c "$(curl -fsSLH 'Cache-Control: no-cache' http://raw.githubusercontent.com/asolopovas/dotfiles/master/init.sh)"
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

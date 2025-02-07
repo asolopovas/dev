@@ -1,0 +1,13 @@
+.env
+.idea
+.vscode
+php/config/sites/**
+!php/config/sites/.gitkeep
+!php/config/sites/phpmyadmin.test.conf
+php/config/ssl/**
+!php/config/ssl/.gitkeep
+db/*.sql
+web-hosts.json
+build.log
+templates.yml
+crontab
