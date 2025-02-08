@@ -63,8 +63,8 @@ RUN mkdir /etc/sudoers.d; \
     chmod 0440 /etc/sudoers.d/${APP_USER}; \
     echo "Set disable_coredump false" > /etc/sudo.conf
 
-ENV VOLTA_HOME /home/${APP_USER}/.volta
-ENV PATH $VOLTA_HOME/bin:$PATH
+ENV VOLTA_HOME=/home/${APP_USER}/.volta
+ENV PATH=$VOLTA_HOME/bin:$PATH
 ENV XDG_DATA_HOME=/home/${APP_USER}/.local/share
 ENV XDG_CONFIG_HOME=/home/${APP_USER}/.config
 ENV XDG_CACHE_HOME=/home/${APP_USER}/.cache
