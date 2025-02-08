@@ -213,7 +213,7 @@ function gen_host_ssl() {
             -days 500 -sha256 -extfile <(printf "$EXT_FILE")
     fi
 
-    [ -f "$CSR_PATH" ] && rm -f "$CSR_PATH"
+    # [ -f "$CSR_PATH" ] && rm -f "$CSR_PATH"
 }
 
 function gen_host_ssl_extfile() {
@@ -422,6 +422,12 @@ function db_cmd {
 }
 
 function import_ROOT_KEY_to_chrome() {
+    # if WSL exit
+    if [ -n "$WSL_DISTRO_NAME" ]; then
+        echo "This script is not supported on WSL"
+        return 1
+    fi
+
     cert_filename=$1
     cert_nickname=${2:-"Root CA"}
 
@@ -525,8 +531,7 @@ restart)
 rootssl)
     gen_root_ssl
     import_ROOT_KEY_to_chrome $ROOT_CRT
-    $DC build nginx
-    $DC up -d nginx
+    $DC restart php
     ;;
 redis-flush)
     $DC exec redis redis-cli flushall
@@ -579,7 +584,7 @@ Allowed options:
     - restart {service}:
         Restart the specified or all Docker Compose service(s).
     - rootssl:
-        Generates a root SSL certificate and imports it to Chrome. Then rebuilds the nginx service.
+        Generates a root SSL certificate and imports it to Chrome. Then rebuilds the php service.
     - redis-monitor:
         Access the redis service's monitor using Docker Compose.
     - redis-flush:
@@ -606,7 +611,7 @@ Usage examples:
     web ps app                               # List the app Docker Compose service
     web new-host <hostname> [-t wp|laravel]  # Set up a new WordPress site for example.com
     web remove-host example.com              # Remove the host example.com and all associated configurations
-    web rootssl                              # Generate a root SSL certificate and import it to Chrome. Then rebuild the nginx service.
+    web rootssl                              # Generate a root SSL certificate and import it to Chrome. Then rebuild the php service.
     web hostssl example.com                  # Generate an SSL certificate for the host example.com
     web import-rootca                        # Import the root Certificate Authority to Chrome
 EOF
