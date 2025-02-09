@@ -30,29 +30,44 @@ function add_host_config {
     program_installed jq || return 1
 
     host_type="${1:-wordpress}"
-    if [ "$host_type" == "wordpress" ]; then
-        db_name="$(echo $(root_domain $HOST) | tr '.' '_')_wp"
+
+    # Extract main domain and extension
+    root_domain=$(echo "$HOST" | awk -F'.' '{print $(NF-1)"."$NF}')  # e.g., woodlandflooring.co.uk
+    main_domain=$(echo "$root_domain" | cut -d'.' -f1)  # woodlandflooring
+
+    # Extract subdomain (everything before root domain)
+    sub_domain=$(echo "$HOST" | sed "s/\.$root_domain//")  # Removes the main domain part
+
+    # If there's a subdomain, format it correctly
+    if [[ "$sub_domain" != "$main_domain" ]]; then
+        db_name="${main_domain}_$(echo $sub_domain | tr '.' '_')"
     else
-        db_name="$(echo $(root_domain $HOST) | tr '.' '_')_db"
+        db_name="${main_domain}"
+    fi
+
+    if [ "$host_type" == "wordpress" ]; then
+        db_name="${db_name}_wp"
+    else
+        db_name="${db_name}_db"
     fi
 
     json_file="$WEB_ROOT/dev/web-hosts.json"
 
-    # Check if the host already exists in the json file
+    # Check if the host already exists in the JSON file
     existing_host=$(jq -r --arg hn "$HOST" '.hosts[] | select(.name == $hn)' $json_file)
     if [ -n "$existing_host" ]; then
         echo "Host $HOST already exists in the JSON file." >&2
         return 1
     fi
 
-    # create new host object
+    # Create new host object
     new_host=$(jq -n \
         --arg hn "$HOST" \
         --arg ht "$host_type" \
         --arg db "$db_name" \
         '{name: $hn, type: $ht, db: $db}')
 
-    # add new host to the json file
+    # Add new host to the JSON file
     jq ".hosts += [$new_host]" $json_file >"temp.json" && mv "temp.json" $json_file
 }
 
@@ -103,6 +118,7 @@ function build_webconf {
         hostname=$(echo "$i" | jq -r '.name')
         type=$(echo "$i" | jq -r '.type')
         DB=$(echo "$i" | jq -r '.db')
+        DB=$(echo $DB | sed -E 's/^db_//')  # Remove 'db_' prefix if it exists
 
         serve_root="/var/www/$hostname"
         site_conf="$SITES_DIR/$hostname.conf"
