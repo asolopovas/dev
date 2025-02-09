@@ -31,12 +31,12 @@ function add_host_config {
 
     host_type="${1:-wordpress}"
 
-    # Extract main domain and extension
+    # Extract root domain (main domain + TLD)
     root_domain=$(echo "$HOST" | awk -F'.' '{print $(NF-1)"."$NF}')  # e.g., woodlandflooring.co.uk
     main_domain=$(echo "$root_domain" | cut -d'.' -f1)  # woodlandflooring
 
     # Extract subdomain (everything before root domain)
-    sub_domain=$(echo "$HOST" | sed "s/\.$root_domain//")  # Removes the main domain part
+    sub_domain=$(echo "$HOST" | sed "s/\.$root_domain//")  # Removes root domain part
 
     # If there's a subdomain, format it correctly
     if [[ "$sub_domain" != "$main_domain" ]]; then
@@ -45,11 +45,15 @@ function add_host_config {
         db_name="${main_domain}"
     fi
 
+    # Append `_db` or `_wp` based on type
     if [ "$host_type" == "wordpress" ]; then
         db_name="${db_name}_wp"
     else
         db_name="${db_name}_db"
     fi
+
+    # Ensure there are no dots (.) in the final database name
+    db_name=$(echo "$db_name" | tr '.' '_')
 
     json_file="$WEB_ROOT/dev/web-hosts.json"
 
@@ -70,6 +74,7 @@ function add_host_config {
     # Add new host to the JSON file
     jq ".hosts += [$new_host]" $json_file >"temp.json" && mv "temp.json" $json_file
 }
+
 
 function add_host_redirection {
     exists=$(getent hosts $1)
@@ -118,7 +123,12 @@ function build_webconf {
         hostname=$(echo "$i" | jq -r '.name')
         type=$(echo "$i" | jq -r '.type')
         DB=$(echo "$i" | jq -r '.db')
-        DB=$(echo $DB | sed -E 's/^db_//')  # Remove 'db_' prefix if it exists
+
+        # Ensure no leading `db_` prefix
+        DB=$(echo "$DB" | sed -E 's/^db_//')
+
+        # Ensure no invalid characters in the database name
+        DB=$(echo "$DB" | tr '.' '_')
 
         serve_root="/var/www/$hostname"
         site_conf="$SITES_DIR/$hostname.conf"
@@ -138,7 +148,7 @@ function build_webconf {
             -e "s|\${SERVE_ROOT}|${serve_root}|g;" \
             $SCRIPT_DIR/php/config/template.conf >$site_conf
 
-        echo "CREATE DATABASE IF NOT EXISTS ${DB};" | docker exec -i dev-mariadb-1 /usr/bin/mariadb -u root --password=secret
+        echo "CREATE DATABASE IF NOT EXISTS \`${DB}\`;" | docker exec -i dev-mariadb-1 /usr/bin/mariadb -u root --password=secret
 
     done
 
