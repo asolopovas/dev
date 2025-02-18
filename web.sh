@@ -499,7 +499,7 @@ dir)
     echo $SCRIPT_DIR
     ;;
 fish)
-    $DC exec app fish
+    $DC exec php fish
     ;;
 git-update)
     user=${2}
