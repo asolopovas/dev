@@ -36,7 +36,6 @@ services:
             XDEBUG_MODE: ${XDEBUG_MODE}
             XDEBUG_IDEKEY: ${XDEBUG_IDEKEY}
             XDEBUG_TRIGGER: ${XDEBUG_TRIGGER}
-
         ports:
             - "80:80" # HTTP
             - "443:443" # HTTPS
