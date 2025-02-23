@@ -493,7 +493,7 @@ debug)
         return 1
     fi
     sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$mode/" $SCRIPT_DIR/.env
-    $DC up -d app
+    $DC up -d php
     ;;
 dir)
     echo $SCRIPT_DIR
