@@ -57,7 +57,7 @@ RUN \
     setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
     chown -R ${UID}:${GID} /data/caddy /config/caddy
 
-RUN apt-get install -y fish neovim sudo
+RUN apt-get install -y fish neovim sudo ffmpeg
 RUN mkdir /etc/sudoers.d; \
     echo "$APP_USER ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${APP_USER}; \
     chmod 0440 /etc/sudoers.d/${APP_USER}; \
