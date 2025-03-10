@@ -26,25 +26,45 @@ function add_host() {
     fi
 }
 
+
 function add_host_config {
     host_type="${1:-wordpress}"
-    root_domain=$(echo "$HOST" | awk -F'.' '{print $(NF-1)"."$NF}')  # e.g., woodlandflooring.co.uk
-    main_domain=$(echo "$root_domain" | cut -d'.' -f1)  # woodlandflooring
-    sub_domain=$(echo "$HOST" | sed "s/\.$root_domain//")  # Removes root domain part
+    parts=($(echo "$HOST" | tr '.' ' '))
+    n=${#parts[@]}
 
-    if [[ "$sub_domain" != "$main_domain" ]]; then
-        db_name="${main_domain}_$(echo $sub_domain | tr '.' '_')"
+    if (( n <= 1 )); then
+        main_domain="$HOST"
+        sub_domain=""
+        root_domain="$HOST"
     else
-        db_name="${main_domain}"
+        tld_count=1
+        if (( n >= 2 )) && (( ${#parts[n-2]} <= 3 )); then
+            tld_count=2
+        fi
+        tld="${parts[n-tld_count]}"
+        for (( i=n-tld_count+1; i<n; i++ )); do
+            tld="$tld.${parts[i]}"
+        done
+        main_idx=$((n - 1 - tld_count))
+        main_domain="${parts[main_idx]}"
+        sub_domain=""
+        if (( main_idx > 0 )); then
+            sub_domain="${parts[0]}"
+            for (( i=1; i<main_idx; i++ )); do
+                sub_domain="$sub_domain.${parts[i]}"
+            done
+        fi
+        root_domain="$main_domain.$tld"
     fi
 
-    if [ "$host_type" == "wordpress" ]; then
-        db_name="${db_name}_wp"
+    if [[ -z "$sub_domain" || "$sub_domain" == "$main_domain" ]]; then
+        db_name="$main_domain"
     else
-        db_name="${db_name}_db"
+        db_name="${main_domain}_$(echo "$sub_domain" | tr '.' '_')"
     fi
 
-    db_name=$(echo "$db_name" | tr '.' '_')
+    [[ "$host_type" == "wordpress" ]] && db_name="${db_name}_wp" || db_name="${db_name}_db"
+    db_name="$(echo "$db_name" | tr '.' '_')"
 
     json_file="$WEB_ROOT/dev/web-hosts.json"
 
@@ -62,6 +82,7 @@ function add_host_config {
 
     jq ".hosts += [$new_host]" $json_file >"temp.json" && mv "temp.json" $json_file
 }
+
 
 function add_host_redirection {
     exists=$(getent hosts $1)
