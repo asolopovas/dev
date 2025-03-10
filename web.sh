@@ -26,7 +26,6 @@ function add_host() {
     fi
 }
 
-
 function add_host_config {
     host_type="${1:-wordpress}"
     root_domain=$(echo "$HOST" | awk -F'.' '{print $(NF-1)"."$NF}')  # e.g., woodlandflooring.co.uk
@@ -63,7 +62,6 @@ function add_host_config {
 
     jq ".hosts += [$new_host]" $json_file >"temp.json" && mv "temp.json" $json_file
 }
-
 
 function add_host_redirection {
     exists=$(getent hosts $1)
