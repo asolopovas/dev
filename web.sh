@@ -26,52 +26,41 @@ function add_host() {
     fi
 }
 
+
 function add_host_config {
-    program_installed jq || return 1
-
     host_type="${1:-wordpress}"
-
-    # Extract root domain (main domain + TLD)
     root_domain=$(echo "$HOST" | awk -F'.' '{print $(NF-1)"."$NF}')  # e.g., woodlandflooring.co.uk
     main_domain=$(echo "$root_domain" | cut -d'.' -f1)  # woodlandflooring
-
-    # Extract subdomain (everything before root domain)
     sub_domain=$(echo "$HOST" | sed "s/\.$root_domain//")  # Removes root domain part
 
-    # If there's a subdomain, format it correctly
     if [[ "$sub_domain" != "$main_domain" ]]; then
         db_name="${main_domain}_$(echo $sub_domain | tr '.' '_')"
     else
         db_name="${main_domain}"
     fi
 
-    # Append `_db` or `_wp` based on type
     if [ "$host_type" == "wordpress" ]; then
         db_name="${db_name}_wp"
     else
         db_name="${db_name}_db"
     fi
 
-    # Ensure there are no dots (.) in the final database name
     db_name=$(echo "$db_name" | tr '.' '_')
 
     json_file="$WEB_ROOT/dev/web-hosts.json"
 
-    # Check if the host already exists in the JSON file
     existing_host=$(jq -r --arg hn "$HOST" '.hosts[] | select(.name == $hn)' $json_file)
     if [ -n "$existing_host" ]; then
         echo "Host $HOST already exists in the JSON file." >&2
         return 1
     fi
 
-    # Create new host object
     new_host=$(jq -n \
         --arg hn "$HOST" \
         --arg ht "$host_type" \
         --arg db "$db_name" \
         '{name: $hn, type: $ht, db: $db}')
 
-    # Add new host to the JSON file
     jq ".hosts += [$new_host]" $json_file >"temp.json" && mv "temp.json" $json_file
 }
 
@@ -199,6 +188,25 @@ function confirm_action {
     esac
 }
 
+function check_docker {
+    if ! command -v docker &>/dev/null; then
+        echo "Error: Docker is not installed or not found in WSL. Please install Docker Desktop and enable WSL integration."
+        exit 1
+    fi
+
+    if ! docker info &>/dev/null; then
+        echo "Error: Docker daemon is not running. Start Docker Desktop and ensure WSL integration is enabled."
+        exit 1
+    fi
+}
+
+function check_jq {
+    if ! command -v jq &>/dev/null; then
+        echo "jq is not installed. Installing jq..."
+        sudo apt update && sudo apt install -y jq
+    fi
+}
+
 function gen_root_ssl() {
     echo "Creating Root Certificate of Authority ..."
     FILENAME="${1:-rootCA}"
@@ -252,9 +260,6 @@ function gen_host_ssl_extfile() {
 		[alt_names]\n
 		DNS.1 = $domain
         IP.1 = 127.0.0.1
-        IP.2 = 192.168.0.16
-        IP.3 = 192.168.1.222
-        IP.4 = 192.168.0.19
 EOF
 }
 
@@ -263,6 +268,9 @@ function is_wsl() {
 }
 
 function new_host {
+    check_docker
+    check_jq
+
     if [ -z "$HOST" ]; then
         echo "Usage: web new-host <hostname> [-t wp|laravel]"
         return 1
