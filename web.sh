@@ -26,7 +26,6 @@ function add_host() {
     fi
 }
 
-
 function add_host_config {
     host_type="${1:-wordpress}"
     parts=($(echo "$HOST" | tr '.' ' '))
@@ -310,10 +309,16 @@ function new_host {
 
     add_host_config "$TYPE" "$HOST"
     if is_wsl; then
-        powershell.exe -Command "New-HostnameMapping $HOST"
+        powershell.exe -Command "
+            if (-Not (Get-Command New-HostnameMapping -ErrorAction SilentlyContinue)) {
+                Import-Module Hosts
+            }
+            New-HostnameMapping $HOST
+        "
     else
         add_host_redirection "$HOST"
     fi
+
     build_webconf
 }
 
@@ -417,7 +422,33 @@ function print_color() {
 }
 
 function root_domain {
-    echo $1 | grep -oP '(.*?(?=\.\w{2,10}(\.\w{2,10})?$))'
+    local domain="$1"
+
+    IFS='.' read -r -a parts <<< "$domain"
+    local n=${#parts[@]}
+
+    if (( n <= 1 )); then
+        echo "$domain"
+        return
+    fi
+
+    local known_sld=("co.uk" "gov.uk" "com.br" "co.jp")
+    local tld_count=1
+    local last_two="${parts[n-2]}.${parts[n-1]}"
+
+    for sld in "${known_sld[@]}"; do
+        if [[ "$last_two" == "$sld" ]]; then
+            tld_count=2
+            break
+        fi
+    done
+
+    local main_idx=$(( n - tld_count - 1 ))
+    if (( main_idx < 0 )); then
+        main_idx=0
+    fi
+
+    echo "${parts[main_idx]}"
 }
 
 function remove_host_config {
