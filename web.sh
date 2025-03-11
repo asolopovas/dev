@@ -421,6 +421,22 @@ function print_color() {
     echo -e "${colors[$1]}$2\033[0m"
 }
 
+function remove_host() {
+    remove_host_config
+    db_cmd remove "$TYPE"
+    echo "Removing $WEB_ROOT/$HOST"
+    rm -rf "$WEB_ROOT/$HOST"
+
+    if is_wsl; then
+        echo "Removing WSL hosts redirection..."
+        powershell.exe -Command "Remove-HostnameMapping $HOST"
+    else
+        remove_host_redirection "$HOST"
+    fi
+
+    build_webconf
+}
+
 function root_domain {
     local domain="$1"
 
@@ -593,21 +609,10 @@ ps)
     $DC ps $2
     ;;
 remove-host)
-    confirm_action "Are you sure you want to remove $HOST?"
-    remove_host_config $HOST
-    db_cmd remove wordpress
-    echo "Removing $WEB_ROOT/$HOST"
-    rm -rf $WEB_ROOT/$HOST
-
-    if is_wsl; then
-        echo "removing wsl hosts redirection \n"
-        echo "Remove-HostnameMapping $HOST"
-        powershell.exe -Command "Remove-HostnameMapping $HOST"
-    else
-        remove_host_redirection $HOST
-    fi
-
-    build_webconf
+    shift
+    parse_args "$@"
+    confirm_action "Are you sure you want to remove $HOST of type $TYPE?"
+    remove_host
     ;;
 restart)
     $DC restart $2
