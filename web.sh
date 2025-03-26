@@ -619,7 +619,7 @@ restart)
     ;;
 rootssl)
     gen_root_ssl
-    import_ROOT_KEY_to_chrome $ROOT_CRT
+    # import_ROOT_KEY_to_chrome $ROOT_CRT
     $DC restart php
     ;;
 redis-flush)
