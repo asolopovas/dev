@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     libwebp-dev \
     libzip-dev \
     imagemagick \
+    wkhtmltopdf \
     libmagickwand-dev
 
 RUN docker-php-ext-install \
