@@ -10,6 +10,7 @@ networks:
 services:
     php:
         image: php
+        restart: unless-stopped
         build:
             context: ./php
             args:
