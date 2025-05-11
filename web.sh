@@ -384,7 +384,7 @@ function new_laravel {
     fi
 
     # # Setup Database
-    db_cmd create laravel
+    db_cmd create laravel $host_name_root
 }
 
 function parse_args() {
