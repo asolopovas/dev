@@ -174,7 +174,6 @@ function build_webconf {
     $DC restart php
 }
 
-
 function build_service {
     local service=""
     local flag=""
@@ -256,9 +255,7 @@ function gen_host_ssl() {
     CSR_PATH="$CERTS_DIR/$SSL_HOST.csr"
     EXT_FILE=$(gen_host_ssl_extfile "$SSL_HOST")
 
-    if [ -f "$KEY_PATH" ]; then
-        print_color yellow "SSL key for $SSL_HOST already exists at $KEY_PATH."
-    else
+    if [ ! -f "$KEY_PATH" ]; then
         print_color green "Generating SSL key for $SSL_HOST"
         openssl req -new -sha256 -nodes \
             -out "$CSR_PATH" -newkey rsa:2048 \
@@ -266,9 +263,7 @@ function gen_host_ssl() {
             -keyout "$KEY_PATH"
     fi
 
-    if [ -f "$CRT_PATH" ]; then
-        print_color yellow "SSL Certificate for $SSL_HOST already exists at $CRT_PATH."
-    else
+    if [ ! -f "$CRT_PATH" ]; then
         print_color green "Generating SSL certificate for $SSL_HOST"
         openssl x509 -req -passin pass:default \
             -in "$CSR_PATH" \
@@ -277,7 +272,7 @@ function gen_host_ssl() {
             -days 500 -sha256 -extfile <(printf "$EXT_FILE")
     fi
 
-    # [ -f "$CSR_PATH" ] && rm -f "$CSR_PATH"
+    [ -f "$CSR_PATH" ] && rm -f "$CSR_PATH"
 }
 
 function gen_host_ssl_extfile() {
