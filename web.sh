@@ -435,8 +435,10 @@ function remove_host() {
     remove_host_config
 
     db_name=$(get_db_name $host_name)
-    echo "Removing database $db_name"
-    db_cmd remove $host_name
+    if [ ! -z $db_name ]; then
+        echo "Removing database $db_name"
+        db_cmd remove $host_name
+    fi
 
     echo "Removing $WEB_ROOT/$HOST"
     rm -rf "$WEB_ROOT/$HOST"
