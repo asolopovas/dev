@@ -154,15 +154,12 @@ function build_webconf {
         sed -e "s|\${HOSTNAME}|$host_name_root|g;" "$SCRIPT_DIR/launch.json" >"$debugout/launch.json"
         sed -e "s|\${APP_URL}|${host_name_root}|g;" -e "s|\${SERVE_ROOT}|${serve_root}|g;" "$SCRIPT_DIR/php/config/template.conf" >"$site_conf"
 
-        echo "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='${db}'"
         # check and create DB if it doesn't exist
         DB_EXISTS=$(docker exec dev-mariadb-1 mariadb -u root -psecret -Nse "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='${db}'")
 
         if [ -z "$DB_EXISTS" ]; then
             echo "Creating missing DB: ${db}"
             docker exec dev-mariadb-1 mariadb -u root -psecret -e "CREATE DATABASE \`${db}\`;"
-        else
-            echo "Database ${db} already exists, skipping creation."
         fi
     done
 
@@ -256,7 +253,7 @@ function gen_host_ssl() {
         openssl req -new -sha256 -nodes \
             -out "$CSR_PATH" -newkey rsa:2048 \
             -subj "/C=GB/ST=London/L=London/O=$SSL_HOST/OU=IT Department/CN=Lyntouch Self-Signed Host Certificate/emailAddress=info@lyntouch.com" \
-            -keyout "$KEY_PATH"
+            -keyout "$KEY_PATH" >/dev/null 2>&1
     fi
 
     if [ ! -f "$CRT_PATH" ]; then
@@ -265,7 +262,7 @@ function gen_host_ssl() {
             -in "$CSR_PATH" \
             -CA "$ROOT_CRT" -CAkey "$ROOT_KEY" \
             -CAcreateserial -out "$CRT_PATH" \
-            -days 500 -sha256 -extfile <(printf "$EXT_FILE")
+            -days 500 -sha256 -extfile <(printf "$EXT_FILE") >/dev/null 2>&1
     fi
 
     [ -f "$CSR_PATH" ] && rm -f "$CSR_PATH"
@@ -349,6 +346,8 @@ function new_wp {
 
     # Setup Wordpress Config
     host_name_root=$(get_host_root $HOST)
+    echo $host_name_root
+
     username=$host_name_root"_wp"
     password="secret"
     sample_conf=$project_path/wp-config-sample.php
@@ -359,14 +358,12 @@ function new_wp {
     echo $password
 
     sed -i "s/username_here/$username/g;s/database_name_here/$username/g;s/password_here/$password/g;s/localhost/mariadb/g;" $dest_conf
-
-    # # Setup Database
-    db_cmd create wordpress $host_name_root
 }
 
 function new_laravel {
     echo "Setting up Laravel for $host..."
     host_name_root=$(get_host_root $host)
+    echo $host_name_root
 
     project_path="$WEB_ROOT/$HOST"
     echo $project_path
@@ -382,9 +379,6 @@ function new_laravel {
         print_color yellow "Laravel project $project_path already exists, remove before continuing"
         return 1
     fi
-
-    # # Setup Database
-    db_cmd create laravel $host_name_root
 }
 
 function parse_args() {
