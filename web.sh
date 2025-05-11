@@ -118,45 +118,43 @@ function build_webconf {
     echo "        aliases:" >>"$yaml_file"
 
     jq -c '.hosts[]' "$config_path" | while read -r i; do
-        hostname=$(echo "$i" | jq -r '.name')
-        echo "          - $hostname" >>"$yaml_file"
+        host_name_root=$(echo "$i" | jq -r '.name')
+        echo "          - $host_name_root" >>"$yaml_file"
     done
 
     echo "" >"$SCRIPT_DIR/crontab"
     jq -c '.hosts[]' "$config_path" | while read -r i; do
-        hostname=$(echo "$i" | jq -r '.name')
+        host_name_root=$(echo "$i" | jq -r '.name')
         type=$(echo "$i" | jq -r '.type')
-        db=$(echo "$i" | jq -r '.db // empty')
+        host_root=$(get_host_root $host_name_root)
+        db="${host_root}_wp"
 
-        # fallback if no db defined
-        if [ -z "$db" ]; then
-            domain=$(echo "$hostname" | cut -d. -f1 | tr '.' '_')
-            if [ "$type" = "wp" ] || [ "$type" = "wordpress" ]; then
-                db="${domain}_wp"
-            else
-                db="${domain}_db"
-            fi
+        if ([ "$type" = "laravel" ]); then
+            db="${host_root}_db"
         fi
 
-        serve_root="/var/www/$hostname"
-        site_conf="$SITES_DIR/$hostname.conf"
-        debugout="$HOME/www/$hostname/.vscode"
+        echo "$type $host_name_root $host_root"
+
+        serve_root="/var/www/$host_name_root"
+        site_conf="$SITES_DIR/$host_name_root.conf"
+        debugout="$HOME/www/$host_name_root/.vscode"
 
         if [ "$type" = "wp" ] || [ "$type" = "wordpress" ]; then
             echo "* * * * * cd $serve_root && php $serve_root/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" >>"$SCRIPT_DIR/crontab"
         fi
 
-        add_host "$hostname"
-        gen_host_ssl "$hostname"
+        add_host "$host_name_root"
+        gen_host_ssl "$host_name_root"
 
         if [ "$type" = "laravel" ]; then
             serve_root="$serve_root/public"
         fi
 
         mkdir -p "$debugout"
-        sed -e "s|\${HOSTNAME}|$hostname|g;" "$SCRIPT_DIR/launch.json" >"$debugout/launch.json"
-        sed -e "s|\${APP_URL}|${hostname}|g;" -e "s|\${SERVE_ROOT}|${serve_root}|g;" "$SCRIPT_DIR/php/config/template.conf" >"$site_conf"
+        sed -e "s|\${HOSTNAME}|$host_name_root|g;" "$SCRIPT_DIR/launch.json" >"$debugout/launch.json"
+        sed -e "s|\${APP_URL}|${host_name_root}|g;" -e "s|\${SERVE_ROOT}|${serve_root}|g;" "$SCRIPT_DIR/php/config/template.conf" >"$site_conf"
 
+        echo "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='${db}'"
         # check and create DB if it doesn't exist
         DB_EXISTS=$(docker exec dev-mariadb-1 mariadb -u root -psecret -Nse "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='${db}'")
 
@@ -274,14 +272,14 @@ function gen_host_ssl() {
 }
 
 function gen_host_ssl_extfile() {
-    domain=$1
+    host_name_root=$1
     cat <<EOF
 		authorityKeyIdentifier=keyid,issuer\n
 		basicConstraints=CA:FALSE\n
 		keyUsage=digitalSignature,nonRepudiation,keyEncipherment,dataEncipherment\n
 		subjectAltName = @alt_names\n
 		[alt_names]\n
-		DNS.1 = $domain
+		DNS.1 = $host_name_root
         IP.1 = 127.0.0.1
 EOF
 }
@@ -350,8 +348,8 @@ function new_wp {
     fi
 
     # Setup Wordpress Config
-    root=$(root_domain $HOST)
-    username=$root"_wp"
+    host_name_root=$(get_host_root $HOST)
+    username=$host_name_root"_wp"
     password="secret"
     sample_conf=$project_path/wp-config-sample.php
     dest_conf=$project_path/wp-config.php
@@ -363,12 +361,12 @@ function new_wp {
     sed -i "s/username_here/$username/g;s/database_name_here/$username/g;s/password_here/$password/g;s/localhost/mariadb/g;" $dest_conf
 
     # # Setup Database
-    db_cmd create wordpress
+    db_cmd create wordpress $host_name_root
 }
 
 function new_laravel {
-    local HOST=$1
-    echo "Setting up Laravel for $HOST..."
+    echo "Setting up Laravel for $host..."
+    host_name_root=$(get_host_root $host)
 
     project_path="$WEB_ROOT/$HOST"
     echo $project_path
@@ -386,7 +384,7 @@ function new_laravel {
     fi
 
     # # Setup Database
-    # db_cmd create laravel
+    db_cmd create laravel
 }
 
 function parse_args() {
@@ -442,7 +440,7 @@ function remove_host() {
     build_webconf
 }
 
-function root_domain {
+function get_host_root {
     local domain="$1"
 
     IFS='.' read -r -a parts <<<"$domain"
@@ -500,13 +498,12 @@ function remove_host_redirection {
 function db_cmd {
     action=$1
     host_type=$2
-
-    domain=$(root_domain $HOST)
+    host_name_root=$3
 
     if [ "$host_type" == "wordpress" ]; then
-        db_name="${domain}_wp"
+        db_name="${host_name_root}_wp"
     else
-        db_name="${domain}_db"
+        db_name="${host_name_root}_db"
     fi
 
     if [ -z "$db_name" ]; then
