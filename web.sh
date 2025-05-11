@@ -21,8 +21,6 @@ function add_host() {
     if ! grep -q "$host_entry" /etc/hosts; then
         echo "Adding $host_entry to /etc/hosts"
         echo "127.0.0.1 $host_entry" | sudo tee -a /etc/hosts >/dev/null
-    else
-        print_color yellow "Host $host_entry is already in /etc/hosts"
     fi
 }
 
