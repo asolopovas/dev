@@ -74,8 +74,9 @@ COPY conf.d/  /usr/local/etc/php/conf.d/
 COPY php-env.sh entrypoint.sh /usr/local/bin/
 
 USER ${UID}:${GID}
+ENV WORKDIR=/var/www
 
 
 RUN NODE_VERSION=${NODE_VERSION} bash -c "$(curl -fsSLH 'Cache-Control: no-cache' http://raw.githubusercontent.com/asolopovas/dotfiles/master/init.sh)"
-WORKDIR /var/www
+WORKDIR /var/${WORKDIR}
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
