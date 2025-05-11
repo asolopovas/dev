@@ -212,6 +212,36 @@ function check_jq {
     fi
 }
 
+function get_host_root {
+    local domain="$1"
+
+    IFS='.' read -r -a parts <<<"$domain"
+    local n=${#parts[@]}
+
+    if ((n <= 1)); then
+        echo "$domain"
+        return
+    fi
+
+    local known_sld=("co.uk" "gov.uk" "com.br" "co.jp")
+    local tld_count=1
+    local last_two="${parts[n - 2]}.${parts[n - 1]}"
+
+    for sld in "${known_sld[@]}"; do
+        if [[ "$last_two" == "$sld" ]]; then
+            tld_count=2
+            break
+        fi
+    done
+
+    local main_idx=$((n - tld_count - 1))
+    if ((main_idx < 0)); then
+        main_idx=0
+    fi
+
+    echo "${parts[main_idx]}"
+}
+
 function gen_root_ssl() {
     echo "Creating Root Certificate of Authority ..."
     FILENAME="${1:-rootCA}"
@@ -329,7 +359,6 @@ function new_wp {
 
     # Setup Wordpress Config
     host_name=$(get_host_root $HOST)
-    echo $host_name
 
     username=$host_name"_wp"
     password="secret"
@@ -359,7 +388,7 @@ function new_laravel {
         # php "$project_path/artisan" key:generate
         # php "$project_path/artisan" storage:link
     else
-        print_color yellow "Laravel project $project_path already exists, remove before continuing"
+        print_color yellow "Laravel project $host_name already exists"
         return 1
     fi
 }
@@ -402,8 +431,13 @@ function print_color() {
 }
 
 function remove_host() {
+    host_name=$1
     remove_host_config
-    db_cmd remove "$TYPE"
+
+    db_name=$(get_db_name $host_name)
+    echo "Removing database $db_name"
+    db_cmd remove $host_name
+
     echo "Removing $WEB_ROOT/$HOST"
     rm -rf "$WEB_ROOT/$HOST"
 
@@ -417,50 +451,15 @@ function remove_host() {
     build_webconf
 }
 
-function get_host_root {
-    local domain="$1"
-
-    IFS='.' read -r -a parts <<<"$domain"
-    local n=${#parts[@]}
-
-    if ((n <= 1)); then
-        echo "$domain"
-        return
-    fi
-
-    local known_sld=("co.uk" "gov.uk" "com.br" "co.jp")
-    local tld_count=1
-    local last_two="${parts[n - 2]}.${parts[n - 1]}"
-
-    for sld in "${known_sld[@]}"; do
-        if [[ "$last_two" == "$sld" ]]; then
-            tld_count=2
-            break
-        fi
-    done
-
-    local main_idx=$((n - tld_count - 1))
-    if ((main_idx < 0)); then
-        main_idx=0
-    fi
-
-    echo "${parts[main_idx]}"
-}
-
 function remove_host_config {
     program_installed jq || return 1
 
     json_file="$WEB_ROOT/dev/web-hosts.json"
 
-    # Check if the host exists in the json file
     existing_host=$(jq -r --arg hn "$HOST" '.hosts[] | select(.name == $hn)' $json_file)
-    if [ -z "$existing_host" ]; then
-        echo "Error: Host $HOST does not exist in the JSON file." >&2
-        exit 1
+    if [ ! -z "$existing_host" ]; then
+        jq --arg hn "$HOST" 'del(.hosts[] | select(.name == $hn))' $json_file >"temp.json" && mv "temp.json" $json_file
     fi
-
-    # Remove the host from the json file
-    jq --arg hn "$HOST" 'del(.hosts[] | select(.name == $hn))' $json_file >"temp.json" && mv "temp.json" $json_file
 }
 
 function remove_host_redirection {
@@ -472,16 +471,16 @@ function remove_host_redirection {
     fi
 }
 
+function get_db_name() {
+    host_nmae="$1"
+    jq -r --arg host "$host_name" '.hosts[] | select(.name == $host) | .db' $WEB_ROOT/dev/web-hosts.json
+}
 function db_cmd {
     action=$1
-    host_type=$2
-    host_name=$3
+    host_name=$2
 
-    if [ "$host_type" == "wordpress" ]; then
-        db_name="${host_name}_wp"
-    else
-        db_name="${host_name}_db"
-    fi
+    # Check if the host exists in the json file get its db name
+    db_name=$(jq -r --arg hn "$host_name" '.hosts[] | select(.name == $hn) | .db' $WEB_ROOT/dev/web-hosts.json)
 
     if [ -z "$db_name" ]; then
         echo "No DB name specified"
@@ -590,8 +589,8 @@ ps)
 remove-host)
     shift
     parse_args "$@"
-    confirm_action "Are you sure you want to remove $HOST of type $TYPE?"
-    remove_host
+    confirm_action "Are you sure you want to remove $HOST?"
+    remove_host $HOST
     ;;
 restart)
     $DC restart $2
