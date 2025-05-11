@@ -97,7 +97,7 @@ function build_webconf {
     fi
 
     if ! jq -e '.hosts[] | select(.name == "phpmyadmin.test")' "$config_path" >/dev/null; then
-        add_host_redirectionion "phpmyadmin.test"
+        add_host_redirect "phpmyadmin.test"
         gen_host_ssl "phpmyadmin.test"
     fi
 
