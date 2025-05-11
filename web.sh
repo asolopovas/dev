@@ -31,25 +31,25 @@ function add_host_config {
     parts=($(echo "$HOST" | tr '.' ' '))
     n=${#parts[@]}
 
-    if (( n <= 1 )); then
+    if ((n <= 1)); then
         main_domain="$HOST"
         sub_domain=""
         root_domain="$HOST"
     else
         tld_count=1
-        if (( n >= 2 )) && (( ${#parts[n-2]} <= 3 )); then
+        if ((n >= 2)) && ((${#parts[n - 2]} <= 3)); then
             tld_count=2
         fi
-        tld="${parts[n-tld_count]}"
-        for (( i=n-tld_count+1; i<n; i++ )); do
+        tld="${parts[n - tld_count]}"
+        for ((i = n - tld_count + 1; i < n; i++)); do
             tld="$tld.${parts[i]}"
         done
         main_idx=$((n - 1 - tld_count))
         main_domain="${parts[main_idx]}"
         sub_domain=""
-        if (( main_idx > 0 )); then
+        if ((main_idx > 0)); then
             sub_domain="${parts[0]}"
-            for (( i=1; i<main_idx; i++ )); do
+            for ((i = 1; i < main_idx; i++)); do
                 sub_domain="$sub_domain.${parts[i]}"
             done
         fi
@@ -82,7 +82,6 @@ function add_host_config {
     jq ".hosts += [$new_host]" $json_file >"temp.json" && mv "temp.json" $json_file
 }
 
-
 function add_host_redirection {
     exists=$(getent hosts $1)
     if [ -z "$exists" ]; then
@@ -96,72 +95,85 @@ function add_host_redirection {
 function build_webconf {
     config_path=$SCRIPT_DIR/web-hosts.json
     yaml_file="$SCRIPT_DIR/templates.yml"
-    find $SCRIPT_DIR/php/config/sites -type f ! -name 'phpmyadmin.test.conf' ! -name '.gitkeep' -delete
+    find "$SCRIPT_DIR/php/config/sites" -type f ! -name 'phpmyadmin.test.conf' ! -name '.gitkeep' -delete
 
-    # Check if config file exists, if not create default one
-    if [ ! -f $config_path ]; then
+    if [ ! -f "$config_path" ]; then
         echo "No config file found, creating default one"
         echo '{
             "output": "'$SITES_DIR'",
             "template": "'$SCRIPT_DIR'/php/config/template.conf",
             "WEB_ROOT": "'$WEB_ROOT'",
             "hosts": []
-        }' >$config_path
+        }' >"$config_path"
         exit 1
     fi
 
-    add_host "phpmyadmin.test"
-    gen_host_ssl "phpmyadmin.test"
+    if ! jq -e '.hosts[] | select(.name == "phpmyadmin.test")' "$config_path" >/dev/null; then
+        add_host "phpmyadmin.test"
+        gen_host_ssl "phpmyadmin.test"
+    fi
 
-    echo "services:" >$yaml_file
-    echo "  php:" >>$yaml_file
-    echo "    networks:" >>$yaml_file
-    echo "      dev_network:" >>$yaml_file
-    echo "        aliases:" >>$yaml_file
+    echo "services:" >"$yaml_file"
+    echo "  php:" >>"$yaml_file"
+    echo "    networks:" >>"$yaml_file"
+    echo "      dev_network:" >>"$yaml_file"
+    echo "        aliases:" >>"$yaml_file"
 
-    jq -c '.hosts[]' $config_path | while read i; do
+    jq -c '.hosts[]' "$config_path" | while read -r i; do
         hostname=$(echo "$i" | jq -r '.name')
-        echo "          - $hostname" >>$yaml_file
+        echo "          - $hostname" >>"$yaml_file"
     done
 
-    echo "" >$SCRIPT_DIR/crontab
-    # Loop through each host in the config file
-    jq -c '.hosts[]' $config_path | while read i; do
+    echo "" >"$SCRIPT_DIR/crontab"
+    jq -c '.hosts[]' "$config_path" | while read -r i; do
         hostname=$(echo "$i" | jq -r '.name')
         type=$(echo "$i" | jq -r '.type')
-        DB=$(echo "$i" | jq -r '.db')
+        db=$(echo "$i" | jq -r '.db // empty')
 
-        # Ensure no leading `db_` prefix
-        DB=$(echo "$DB" | sed -E 's/^db_//')
-
-        # Ensure no invalid characters in the database name
-        DB=$(echo "$DB" | tr '.' '_')
+        # fallback if no db defined
+        if [ -z "$db" ]; then
+            domain=$(echo "$hostname" | cut -d. -f1 | tr '.' '_')
+            if [ "$type" = "wp" ] || [ "$type" = "wordpress" ]; then
+                db="${domain}_wp"
+            else
+                db="${domain}_db"
+            fi
+        fi
 
         serve_root="/var/www/$hostname"
         site_conf="$SITES_DIR/$hostname.conf"
         debugout="$HOME/www/$hostname/.vscode"
 
-        echo "* * * * * cd /var/www/$hostname && php /var/www/$hostname/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" >>$SCRIPT_DIR/crontab
+        if [ "$type" = "wp" ] || [ "$type" = "wordpress" ]; then
+            echo "* * * * * cd $serve_root && php $serve_root/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" >>"$SCRIPT_DIR/crontab"
+        fi
 
         add_host "$hostname"
         gen_host_ssl "$hostname"
 
-        [ "$type" == "laravel" ] && serve_root="$serve_root/public"
+        if [ "$type" = "laravel" ]; then
+            serve_root="$serve_root/public"
+        fi
 
-        mkdir -p $debugout
-        sed -e "s|\${HOSTNAME}|$hostname|g;" $SCRIPT_DIR/launch.json >$debugout/launch.json
+        mkdir -p "$debugout"
+        sed -e "s|\${HOSTNAME}|$hostname|g;" "$SCRIPT_DIR/launch.json" >"$debugout/launch.json"
+        sed -e "s|\${APP_URL}|${hostname}|g;" -e "s|\${SERVE_ROOT}|${serve_root}|g;" "$SCRIPT_DIR/php/config/template.conf" >"$site_conf"
 
-        sed -e "s|\${APP_URL}|${hostname}|g;" \
-            -e "s|\${SERVE_ROOT}|${serve_root}|g;" \
-            $SCRIPT_DIR/php/config/template.conf >$site_conf
+        # check and create DB if it doesn't exist
+        DB_EXISTS=$(docker exec dev-mariadb-1 mariadb -u root -psecret -Nse "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='${db}'")
 
-        echo "CREATE DATABASE IF NOT EXISTS \`${DB}\`;" | docker exec -i dev-mariadb-1 /usr/bin/mariadb -u root --password=secret
-
+        if [ -z "$DB_EXISTS" ]; then
+            echo "Creating missing DB: ${db}"
+            docker exec dev-mariadb-1 mariadb -u root -psecret -e "CREATE DATABASE \`${db}\`;"
+        else
+            echo "Database ${db} already exists, skipping creation."
+        fi
     done
 
     echo "Finished Building Web Configs Restarting Caddy"
     $DC restart php
 }
+
 
 function build_service {
     local service=""
@@ -440,17 +452,17 @@ function remove_host() {
 function root_domain {
     local domain="$1"
 
-    IFS='.' read -r -a parts <<< "$domain"
+    IFS='.' read -r -a parts <<<"$domain"
     local n=${#parts[@]}
 
-    if (( n <= 1 )); then
+    if ((n <= 1)); then
         echo "$domain"
         return
     fi
 
     local known_sld=("co.uk" "gov.uk" "com.br" "co.jp")
     local tld_count=1
-    local last_two="${parts[n-2]}.${parts[n-1]}"
+    local last_two="${parts[n - 2]}.${parts[n - 1]}"
 
     for sld in "${known_sld[@]}"; do
         if [[ "$last_two" == "$sld" ]]; then
@@ -459,8 +471,8 @@ function root_domain {
         fi
     done
 
-    local main_idx=$(( n - tld_count - 1 ))
-    if (( main_idx < 0 )); then
+    local main_idx=$((n - tld_count - 1))
+    if ((main_idx < 0)); then
         main_idx=0
     fi
 
