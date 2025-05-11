@@ -126,14 +126,8 @@ function build_webconf {
     jq -c '.hosts[]' "$config_path" | while read -r i; do
         host_name_root=$(echo "$i" | jq -r '.name')
         type=$(echo "$i" | jq -r '.type')
+        db=$(echo "$i" | jq -r '.db')
         host_root=$(get_host_root $host_name_root)
-        db="${host_root}_wp"
-
-        if ([ "$type" = "laravel" ]); then
-            db="${host_root}_db"
-        fi
-
-        echo "$type $host_name_root $host_root"
 
         serve_root="/var/www/$host_name_root"
         site_conf="$SITES_DIR/$host_name_root.conf"
