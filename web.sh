@@ -292,12 +292,7 @@ function host_redirect_add() {
     HOST="$1"
     if is_wsl; then
         echo "Adding host redirection for \"$HOST\""
-        powershell.exe -Command "
-            if (-Not (Get-Command New-HostnameMapping -ErrorAction SilentlyContinue)) {
-                Import-Module Hosts
-            }
-            New-HostnameMapping $HOST
-        "
+        powershell.exe -Command "New-HostnameMapping $HOST"
     else
         exists=$(getent hosts "$HOST")
         if [ -z "$exists" ]; then
