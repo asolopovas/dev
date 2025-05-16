@@ -127,7 +127,8 @@ function build_webconf {
             echo "* * * * * cd $serve_root && php $serve_root/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" >>"$SCRIPT_DIR/crontab"
         fi
 
-        gen_host_ssl "$host_name"
+        add_host_redirect $host_name
+        gen_host_ssl $host_name
 
         if [ "$type" = "laravel" ]; then
             serve_root="$serve_root/public"
