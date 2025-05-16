@@ -90,7 +90,7 @@ function build_webconf {
 
     if ! jq -e '.hosts[] | select(.name == "phpmyadmin.test")' "$config_path" >/dev/null; then
         host_redirect_add "phpmyadmin.test"
-        gen_host_ssl "phpmyadmin.test"
+        host_ssl_generate "phpmyadmin.test"
     fi
 
     echo "services:" >"$yaml_file"
@@ -120,7 +120,7 @@ function build_webconf {
         fi
 
         host_redirect_add $host_name
-        gen_host_ssl $host_name
+        host_ssl_generate $host_name
 
         if [ "$type" = "laravel" ]; then
             serve_root="$serve_root/public"
@@ -170,7 +170,6 @@ function check_host {
         exit 1
     fi
 }
-
 function confirm_action {
     read -p "$1 [Y/N]" -n 1 -r REPLY
     echo ""
@@ -235,7 +234,7 @@ function get_host_root {
     echo "${parts[main_idx]}"
 }
 
-function gen_root_ssl() {
+function host_root_ssl_generate() {
     echo "Creating Root Certificate of Authority ..."
     FILENAME="${1:-rootCA}"
     KEY_PATH="$CERTS_DIR/$FILENAME.key"
@@ -247,12 +246,12 @@ function gen_root_ssl() {
         -out "$CRT_PATH"
 }
 
-function gen_host_ssl() {
+function host_ssl_generate() {
     SSL_HOST=$1
     CRT_PATH="$CERTS_DIR/$SSL_HOST.crt"
     KEY_PATH="$CERTS_DIR/$SSL_HOST.key"
     CSR_PATH="$CERTS_DIR/$SSL_HOST.csr"
-    EXT_FILE=$(gen_host_ssl_extfile "$SSL_HOST")
+    EXT_FILE=$(host_ssl_generate_extfile "$SSL_HOST")
 
     if [ ! -f "$KEY_PATH" ]; then
         print_color green "Generating SSL key for $SSL_HOST"
@@ -274,7 +273,7 @@ function gen_host_ssl() {
     [ -f "$CSR_PATH" ] && rm -f "$CSR_PATH"
 }
 
-function gen_host_ssl_extfile() {
+function host_ssl_generate_extfile() {
     host_name=$1
     cat <<EOF
 		authorityKeyIdentifier=keyid,issuer\n
@@ -344,7 +343,7 @@ function new_host {
         ;;
     esac
 
-    add_host_config "$TYPE" "$HOST"
+    edd_host_config "$TYPE" "$HOST"
     host_redirect_add "$HOST"
 
     build_webconf
@@ -445,9 +444,9 @@ function print_color() {
     echo -e "${colors[$1]}$2\033[0m"
 }
 
-function remove_host() {
+function host_remove() {
     host_name=$1
-    remove_host_config
+    host_config_del
 
     db_name=$(get_db_name $host_name)
     if [ ! -z $db_name ]; then
@@ -458,12 +457,12 @@ function remove_host() {
     echo "Removing $WEB_ROOT/$HOST"
     rm -rf "$WEB_ROOT/$HOST"
 
-    host_remove_redirection "$HOST"
+    host_redirect_del "$HOST"
 
     build_webconf
 }
 
-function remove_host_config {
+function host_config_del {
     program_installed jq || return 1
 
     json_file="$WEB_ROOT/dev/web-hosts.json"
@@ -569,7 +568,7 @@ git-update)
     ssh "${user}@lyntouch.com" "git -C public_html/wp-content/plugins/${plugin} pull; git -C public_html/wp-content/themes/${theme} pull"
     ;;
 hostssl)
-    gen_host_ssl $HOST
+    host_ssl_generate $HOST
     ;;
 import-rootca)
     import_ROOT_KEY_to_chrome $ROOT_CRT
@@ -593,13 +592,13 @@ remove-host)
     shift
     parse_args "$@"
     confirm_action "Are you sure you want to remove $HOST?"
-    remove_host $HOST
+    host_remove $HOST
     ;;
 restart)
     $DC restart $2
     ;;
 rootssl)
-    gen_root_ssl
+    host_root_ssl_generate
     # import_ROOT_KEY_to_chrome $ROOT_CRT
     $DC restart php
     ;;
