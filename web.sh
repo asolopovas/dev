@@ -73,7 +73,7 @@ function add_host_config {
 }
 
 function build_webconf {
-    config_path=$SCRIPT_DIR/web-hosts.json
+    config_path="$SCRIPT_DIR/web-hosts.json"
     yaml_file="$SCRIPT_DIR/templates.yml"
     find "$SCRIPT_DIR/php/config/sites" -type f ! -name 'phpmyadmin.test.conf' ! -name '.gitkeep' -delete
 
@@ -99,71 +99,56 @@ function build_webconf {
     echo "      dev_network:" >>"$yaml_file"
     echo "        aliases:" >>"$yaml_file"
 
-    jq -c '.hosts[]' "$config_path" | while read -r i; do
-        host_name=$(echo "$i" | jq -r '.name')
+    for row in $(jq -c '.hosts[]' "$config_path"); do
+        host_name=$(echo "$row" | jq -r '.name')
         echo "          - $host_name" >>"$yaml_file"
     done
 
     echo "" >"$SCRIPT_DIR/crontab"
 
-    jq -c '.hosts[]' "$config_path" | while read -r i; do
+    mapfile -t host_entries < <(jq -c '.hosts[]' "$config_path")
+    for row in "${host_entries[@]}"; do
+        {
+            host_name=$(echo "$row" | jq -r '.name')
+            type=$(echo "$row" | jq -r '.type')
+            db=$(echo "$row" | jq -r '.db')
+            host_name_root=$(hostname_root "$host_name")
 
-        host_name=$(echo "$i" | jq -r '.name')
-        type=$(echo "$i" | jq -r '.type')
-        db=$(echo "$i" | jq -r '.db')
-        host_name_root=$(hostname_root $host_name)
+            echo "🔧 Processing host: $host_name"
 
-        serve_root="/var/www/$host_name"
-        site_conf="$SITES_DIR/$host_name.conf"
-        debugout="$HOME/www/$host_name/.vscode"
+            serve_root="/var/www/$host_name"
+            site_conf="$SITES_DIR/$host_name.conf"
+            debugout="$HOME/www/$host_name/.vscode"
 
-        if [ "$type" = "wp" ] || [ "$type" = "wordpress" ]; then
-            echo "* * * * * cd $serve_root && php $serve_root/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" >>"$SCRIPT_DIR/crontab"
-        fi
+            if [[ "$type" == "wp" || "$type" == "wordpress" ]]; then
+                echo "* * * * * cd $serve_root && php $serve_root/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" >>"$SCRIPT_DIR/crontab"
+            fi
 
-        echo $host_name
-        host_redirect_add $host_name
-        host_ssl_generate $host_name
+            host_redirect_add "$host_name"
+            host_ssl_generate "$host_name"
 
-        if [ "$type" = "laravel" ]; then
-            serve_root="$serve_root/public"
-        fi
+            [[ "$type" == "laravel" ]] && serve_root="$serve_root/public"
 
-        mkdir -p "$debugout"
-        sed -e "s|\${HOSTNAME}|$host_name|g;" "$SCRIPT_DIR/launch.json" >"$debugout/launch.json"
-        sed -e "s|\${APP_URL}|${host_name}|g;" -e "s|\${SERVE_ROOT}|${serve_root}|g;" "$SCRIPT_DIR/php/config/template.conf" >"$site_conf"
+            mkdir -p "$debugout"
+            sed -e "s|\${HOSTNAME}|$host_name|g;" "$SCRIPT_DIR/launch.json" >"$debugout/launch.json"
+            sed -e "s|\${APP_URL}|${host_name}|g;" -e "s|\${SERVE_ROOT}|${serve_root}|g;" \
+                "$SCRIPT_DIR/php/config/template.conf" >"$site_conf"
 
-        DB_EXISTS=$(docker exec dev-mariadb-1 mariadb -u root -psecret -Nse "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='${db}'")
+            DB_EXISTS=$(docker exec dev-mariadb-1 mariadb -u root -psecret -Nse \
+                "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='${db}'")
 
-        if [ -z "$DB_EXISTS" ]; then
-            echo "Creating missing DB: ${db}"
-            docker exec dev-mariadb-1 mariadb -u root -psecret -e "CREATE DATABASE \`${db}\`;"
-        fi
+            if [ -z "$DB_EXISTS" ]; then
+                echo "📦 Creating missing DB: ${db}"
+                docker exec dev-mariadb-1 mariadb -u root -psecret -e "CREATE DATABASE \`${db}\`;"
+            fi
+        } || {
+            echo "❌ Error processing host: $host_name. Skipping..."
+            continue
+        }
     done
 
-    echo "Finished Building Web Configs Restarting Caddy"
+    echo "✅ Finished Building Web Configs. Restarting Caddy..."
     $DC restart php
-}
-
-function build_service {
-    local service=""
-    local flag=""
-
-    for arg in "$@"; do
-        if [[ $arg == "--no-cache" ]]; then
-            flag="--no-cache"
-        else
-            service="$arg"
-        fi
-    done
-
-    if [ -z "$service" ]; then
-        $DC build $flag --parallel
-        $DC up -d --force-recreate
-    else
-        $DC build $flag $service
-        $DC up --force-recreate -d $service
-    fi
 }
 
 function check_host {
