@@ -72,14 +72,6 @@ function add_host_config {
     jq ".hosts += [$new_host]" $json_file >"temp.json" && mv "temp.json" $json_file
 }
 
-function add_host_redirect {
-    exists=$(getent hosts $1)
-    if [ -z "$exists" ]; then
-        echo "Adding localhost redirection for \"$1\""
-        echo "127.0.0.1 $1" | sudo tee -a /etc/hosts >/dev/null
-    fi
-}
-
 function build_webconf {
     config_path=$SCRIPT_DIR/web-hosts.json
     yaml_file="$SCRIPT_DIR/templates.yml"
@@ -97,7 +89,7 @@ function build_webconf {
     fi
 
     if ! jq -e '.hosts[] | select(.name == "phpmyadmin.test")' "$config_path" >/dev/null; then
-        add_host_redirect "phpmyadmin.test"
+        host_redirect_add "phpmyadmin.test"
         gen_host_ssl "phpmyadmin.test"
     fi
 
@@ -127,7 +119,7 @@ function build_webconf {
             echo "* * * * * cd $serve_root && php $serve_root/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" >>"$SCRIPT_DIR/crontab"
         fi
 
-        add_host_redirect $host_name
+        host_redirect_add $host_name
         gen_host_ssl $host_name
 
         if [ "$type" = "laravel" ]; then
@@ -295,6 +287,37 @@ function gen_host_ssl_extfile() {
 EOF
 }
 
+function host_redirect_add() {
+    HOST="$1"
+    if is_wsl; then
+        echo "Adding host redirection for \"$HOST\""
+        powershell.exe -Command "
+            if (-Not (Get-Command New-HostnameMapping -ErrorAction SilentlyContinue)) {
+                Import-Module Hosts
+            }
+            New-HostnameMapping $HOST
+        "
+    else
+        exists=$(getent hosts "$HOST")
+        if [ -z "$exists" ]; then
+            echo "Adding redirection for \"$HOST\""
+            echo "127.0.0.1 $HOST" | sudo tee -a /etc/hosts >/dev/null
+        fi
+    fi
+}
+
+function host_redirect_del {
+    HOST="$1"
+    echo "Removing host redirection for \"$HOST\""
+    if is_wsl; then
+        powershell.exe -Command "Remove-HostnameMapping $HOST"
+    else
+        if grep -q "$HOST" /etc/hosts; then
+            sudo sed -i.bak "/$HOST/d" /etc/hosts
+        fi
+    fi
+}
+
 function is_wsl() {
     grep -q WSL /proc/version
 }
@@ -322,16 +345,7 @@ function new_host {
     esac
 
     add_host_config "$TYPE" "$HOST"
-    if is_wsl; then
-        powershell.exe -Command "
-            if (-Not (Get-Command New-HostnameMapping -ErrorAction SilentlyContinue)) {
-                Import-Module Hosts
-            }
-            New-HostnameMapping $HOST
-        "
-    else
-        add_host_redirect "$HOST"
-    fi
+    host_redirect_add "$HOST"
 
     build_webconf
 }
@@ -444,12 +458,7 @@ function remove_host() {
     echo "Removing $WEB_ROOT/$HOST"
     rm -rf "$WEB_ROOT/$HOST"
 
-    if is_wsl; then
-        echo "Removing WSL hosts redirection..."
-        powershell.exe -Command "Remove-HostnameMapping $HOST"
-    else
-        remove_host_redirection "$HOST"
-    fi
+    host_remove_redirection "$HOST"
 
     build_webconf
 }
@@ -462,15 +471,6 @@ function remove_host_config {
     existing_host=$(jq -r --arg hn "$HOST" '.hosts[] | select(.name == $hn)' $json_file)
     if [ ! -z "$existing_host" ]; then
         jq --arg hn "$HOST" 'del(.hosts[] | select(.name == $hn))' $json_file >"temp.json" && mv "temp.json" $json_file
-    fi
-}
-
-function remove_host_redirection {
-    if grep -q $1 /etc/hosts; then
-        sudo sed -i.bak "/$1/d" /etc/hosts
-        echo "Host redirection for \"$1\" removed"
-    else
-        echo "Host redirection for \"$1\" does not exist"
     fi
 }
 
