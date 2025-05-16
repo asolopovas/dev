@@ -105,11 +105,13 @@ function build_webconf {
     done
 
     echo "" >"$SCRIPT_DIR/crontab"
+
     jq -c '.hosts[]' "$config_path" | while read -r i; do
+
         host_name=$(echo "$i" | jq -r '.name')
         type=$(echo "$i" | jq -r '.type')
         db=$(echo "$i" | jq -r '.db')
-        host_name_root=$(get_host_root $host_name)
+        host_name_root=$(hostname_root $host_name)
 
         serve_root="/var/www/$host_name"
         site_conf="$SITES_DIR/$host_name.conf"
@@ -119,6 +121,7 @@ function build_webconf {
             echo "* * * * * cd $serve_root && php $serve_root/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" >>"$SCRIPT_DIR/crontab"
         fi
 
+        echo $host_name
         host_redirect_add $host_name
         host_ssl_generate $host_name
 
@@ -130,7 +133,6 @@ function build_webconf {
         sed -e "s|\${HOSTNAME}|$host_name|g;" "$SCRIPT_DIR/launch.json" >"$debugout/launch.json"
         sed -e "s|\${APP_URL}|${host_name}|g;" -e "s|\${SERVE_ROOT}|${serve_root}|g;" "$SCRIPT_DIR/php/config/template.conf" >"$site_conf"
 
-        # check and create DB if it doesn't exist
         DB_EXISTS=$(docker exec dev-mariadb-1 mariadb -u root -psecret -Nse "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='${db}'")
 
         if [ -z "$DB_EXISTS" ]; then
@@ -204,7 +206,7 @@ function check_jq {
     fi
 }
 
-function get_host_root {
+function hostname_root {
     local domain="$1"
 
     IFS='.' read -r -a parts <<<"$domain"
@@ -253,6 +255,7 @@ function host_ssl_generate() {
     CSR_PATH="$CERTS_DIR/$SSL_HOST.csr"
     EXT_FILE=$(host_ssl_generate_extfile "$SSL_HOST")
 
+    echo $KEY_PATH
     if [ ! -f "$KEY_PATH" ]; then
         print_color green "Generating SSL key for $SSL_HOST"
         openssl req -new -sha256 -nodes \
@@ -261,6 +264,7 @@ function host_ssl_generate() {
             -keyout "$KEY_PATH" >/dev/null 2>&1
     fi
 
+    echo $CRT_PATH
     if [ ! -f "$CRT_PATH" ]; then
         print_color green "Generating SSL certificate for $SSL_HOST"
         openssl x509 -req -passin pass:default \
@@ -372,7 +376,7 @@ function new_wp {
     fi
 
     # Setup Wordpress Config
-    host_name=$(get_host_root $HOST)
+    host_name=$(hostname_root $HOST)
 
     username=$host_name"_wp"
     password="secret"
@@ -388,7 +392,7 @@ function new_wp {
 
 function new_laravel {
     echo "Setting up Laravel for $host..."
-    host_name=$(get_host_root $host)
+    host_name=$(hostname_root $host)
     echo $host_name
 
     project_path="$WEB_ROOT/$HOST"
