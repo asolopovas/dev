@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# set -o errexit
+set -o errexit
 set -o pipefail
 
 CMD="${1:-false}"
@@ -261,7 +261,7 @@ function host_ssl_generate() {
         openssl req -new -sha256 -nodes \
             -out "$CSR_PATH" -newkey rsa:2048 \
             -subj "/C=GB/ST=London/L=London/O=$SSL_HOST/OU=IT Department/CN=Lyntouch Self-Signed Host Certificate/emailAddress=info@lyntouch.com" \
-            -keyout "$KEY_PATH" >/dev/null 2>&1
+            -keyout "$KEY_PATH"
     fi
 
     echo $CRT_PATH
@@ -271,7 +271,7 @@ function host_ssl_generate() {
             -in "$CSR_PATH" \
             -CA "$ROOT_CRT" -CAkey "$ROOT_KEY" \
             -CAcreateserial -out "$CRT_PATH" \
-            -days 500 -sha256 -extfile <(printf "$EXT_FILE") >/dev/null 2>&1
+            -days 500 -sha256 -extfile <(printf "$EXT_FILE")
     fi
 
     [ -f "$CSR_PATH" ] && rm -f "$CSR_PATH"
