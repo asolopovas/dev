@@ -255,7 +255,6 @@ function host_ssl_generate() {
     CSR_PATH="$CERTS_DIR/$SSL_HOST.csr"
     EXT_FILE=$(host_ssl_generate_extfile "$SSL_HOST")
 
-    echo $KEY_PATH
     if [ ! -f "$KEY_PATH" ]; then
         print_color green "Generating SSL key for $SSL_HOST"
         openssl req -new -sha256 -nodes \
@@ -264,7 +263,6 @@ function host_ssl_generate() {
             -keyout "$KEY_PATH"
     fi
 
-    echo $CRT_PATH
     if [ ! -f "$CRT_PATH" ]; then
         print_color green "Generating SSL certificate for $SSL_HOST"
         openssl x509 -req -passin pass:default \
