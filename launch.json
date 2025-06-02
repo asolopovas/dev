@@ -18,6 +18,17 @@
                 "max_data": -1,
                 "max_depth": 3
             }
+        },
+        {
+            "name": "Listen for Xdebug (CLI)",
+            "type": "php",
+            "request": "launch",
+            "port": 9003,
+            "xdebugSettings": {
+                "max_children": 128,
+                "max_data": -1,
+                "max_depth": 3
+            }
         }
     ]
 }
