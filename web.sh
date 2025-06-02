@@ -256,7 +256,7 @@ function host_ssl_generate() {
             -days 500 -sha256 -extfile <(printf "$EXT_FILE")
     fi
 
-    # [ -f "$CSR_PATH" ] && rm -f "$CSR_PATH"
+    rm -f "$CSR_PATH"
 }
 
 function host_ssl_generate_extfile() {
