@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -o errexit
-set -o pipefail
 
 CMD="${1:-false}"
 HOST="${2:-false}"
@@ -88,7 +87,7 @@ function build_webconf {
         exit 1
     fi
 
-    if ! jq -e '.hosts[] | select(.name == "phpmyadmin.test")' "$config_path" >/dev/null; then
+    if ! jq -e '.hosts[] | select(.name == "phpmyadmin.test")' "$config_path"; then
         host_redirect_add "phpmyadmin.test"
         host_ssl_generate "phpmyadmin.test"
     fi
@@ -257,7 +256,7 @@ function host_ssl_generate() {
             -days 500 -sha256 -extfile <(printf "$EXT_FILE")
     fi
 
-    [ -f "$CSR_PATH" ] && rm -f "$CSR_PATH"
+    # [ -f "$CSR_PATH" ] && rm -f "$CSR_PATH"
 }
 
 function host_ssl_generate_extfile() {
@@ -281,7 +280,7 @@ function host_redirect_add() {
     else
         exists=$(getent hosts "$HOST")
         if [ -z "$exists" ]; then
-            echo "Adding redirection for \"$HOST\""
+            echo "Adding host redirection for \"$HOST\""
             echo "127.0.0.1 $HOST" | sudo tee -a /etc/hosts >/dev/null
         fi
     fi
