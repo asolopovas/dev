@@ -4,6 +4,8 @@ RUN apt-get update && apt-get install -y \
     unzip \
     wget \
     curl \
+    fish \
+    ffmpeg \
     imagemagick \
     jpegoptim \
     libavif-dev \
@@ -15,7 +17,10 @@ RUN apt-get update && apt-get install -y \
     libpng-dev \
     libwebp-dev \
     libzip-dev \
+    neovim \
     optipng \
+    pngquant \
+    sudo \
     wkhtmltopdf
 
 RUN docker-php-ext-install \
@@ -60,7 +65,6 @@ RUN \
     setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
     chown -R ${UID}:${GID} /data/caddy /config/caddy
 
-RUN apt-get install -y sudo fish neovim ffmpeg
 RUN mkdir /etc/sudoers.d; \
     echo "$APP_USER ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${APP_USER}; \
     chmod 0440 /etc/sudoers.d/${APP_USER}; \
