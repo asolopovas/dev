@@ -4,17 +4,19 @@ RUN apt-get update && apt-get install -y \
     unzip \
     wget \
     curl \
+    imagemagick \
+    jpegoptim \
     libavif-dev \
     libfreetype6-dev \
+    libmagickwand-dev \
     libjpeg-dev \
     libmemcached-dev \
     libpq-dev \
     libpng-dev \
     libwebp-dev \
     libzip-dev \
-    imagemagick \
-    wkhtmltopdf \
-    libmagickwand-dev
+    optipng \
+    wkhtmltopdf
 
 RUN docker-php-ext-install \
     bcmath \
