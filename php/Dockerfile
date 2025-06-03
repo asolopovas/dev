@@ -48,7 +48,6 @@ RUN docker-php-ext-install gd
 # Install PECL and PEAR extensions
 RUN pecl install imagick && docker-php-ext-enable imagick
 RUN pecl install xdebug && docker-php-ext-enable xdebug
-RUN pecl install swoole && docker-php-ext-enable swoole
 RUN pecl install redis && docker-php-ext-enable redis
 RUN pecl install apcu && docker-php-ext-enable apcu
 RUN pecl install igbinary && docker-php-ext-enable igbinary
