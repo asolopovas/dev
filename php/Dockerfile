@@ -25,11 +25,13 @@ RUN docker-php-ext-install \
     zip
 
 RUN docker-php-ext-configure intl && docker-php-ext-install intl && docker-php-ext-enable intl
+
 RUN docker-php-ext-configure gd \
     --with-freetype \
     --with-jpeg \
     --with-avif \
     --with-webp
+
 RUN docker-php-ext-install gd
 
 # Install PECL and PEAR extensions
@@ -40,7 +42,7 @@ RUN pecl install apcu && docker-php-ext-enable apcu
 RUN pecl install igbinary && docker-php-ext-enable igbinary
 
 # Additional Software
-RUN  apt-get install -y \
+RUN apt-get install -y \
     git \
     unzip \
     curl \
@@ -55,19 +57,13 @@ RUN  apt-get install -y \
     ripgrep \
     jpegoptim
 
-# RUN curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz && \
-#     tar -C /opt -xzf nvim-linux-x86_64.tar.gz && \
-#     rm nvim-linux-x86_64.tar.gz && \
-#     ln -sf /opt/nvim-linux-x86_64/bin/nvim /usr/bin/vim
-
 ARG UID=1000
 ARG GID=1000
 ARG APP_USER=app
 ENV APP_USER=${APP_USER}
 
 # User configuration
-RUN \
-    groupadd -g ${GID} ${APP_USER} || true; \
+RUN groupadd -g ${GID} ${APP_USER} || true; \
     useradd -m -u ${UID} -g ${GID} -s /bin/bash ${APP_USER}; \
     setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
     chown -R ${UID}:${GID} /data/caddy /config/caddy
