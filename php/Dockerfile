@@ -81,7 +81,7 @@ ENV XDG_CACHE_HOME=/home/${APP_USER}/.cache
 
 COPY conf.d/  /usr/local/etc/php/conf.d/
 COPY php-env.sh entrypoint.sh /usr/local/bin/
-RUN echo "a" > /dev/null
+RUN echo "b" > /dev/null
 
 USER ${UID}:${GID}
 ENV WORKDIR=/var/www
