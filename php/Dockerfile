@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y \
     neovim \
     optipng \
     pngquant \
+    ripgrep \
     sudo \
     wkhtmltopdf
 
