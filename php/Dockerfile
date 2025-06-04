@@ -55,10 +55,10 @@ RUN  apt-get install -y \
     ripgrep \
     jpegoptim
 
-RUN curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz && \
-    tar -C /opt -xzf nvim-linux-x86_64.tar.gz && \
-    rm nvim-linux-x86_64.tar.gz && \
-    ln -sf /opt/nvim-linux-x86_64/bin/nvim /usr/bin/vim
+# RUN curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz && \
+#     tar -C /opt -xzf nvim-linux-x86_64.tar.gz && \
+#     rm nvim-linux-x86_64.tar.gz && \
+#     ln -sf /opt/nvim-linux-x86_64/bin/nvim /usr/bin/vim
 
 ARG UID=1000
 ARG GID=1000
