@@ -39,8 +39,6 @@ RUN pecl install redis && docker-php-ext-enable redis
 RUN pecl install apcu && docker-php-ext-enable apcu
 RUN pecl install igbinary && docker-php-ext-enable igbinary
 
-
-
 # Additional Software
 RUN  apt-get install -y \
     git \
@@ -56,6 +54,11 @@ RUN  apt-get install -y \
     pngquant \
     ripgrep \
     jpegoptim
+
+RUN curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz && \
+    tar -C /opt -xzf nvim-linux-x86_64.tar.gz && \
+    rm nvim-linux-x86_64.tar.gz && \
+    ln -sf /opt/nvim-linux-x86_64/bin/nvim /usr/bin/vim
 
 ARG UID=1000
 ARG GID=1000
@@ -85,7 +88,6 @@ COPY php-env.sh entrypoint.sh /usr/local/bin/
 
 USER ${UID}:${GID}
 ENV WORKDIR=/var/www
-
 
 RUN NODE_VERSION=${NODE_VERSION} bash -c "$(curl -fsSLH 'Cache-Control: no-cache' http://raw.githubusercontent.com/asolopovas/dotfiles/master/init.sh)"
 WORKDIR ${WORKDIR}
