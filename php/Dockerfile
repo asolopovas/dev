@@ -81,13 +81,11 @@ ENV XDG_CACHE_HOME=/home/${APP_USER}/.cache
 
 COPY conf.d/  /usr/local/etc/php/conf.d/
 COPY php-env.sh entrypoint.sh /usr/local/bin/
-RUN echo "d" > /dev/null
 
 USER ${UID}:${GID}
 ENV WORKDIR=/var/www
 
 RUN NODE_VERSION=${NODE_VERSION} bash -c "$(curl -fsSLH 'Cache-Control: no-cache' http://raw.githubusercontent.com/asolopovas/dotfiles/master/init.sh)"
-RUN $HOME/.local/nvim/bin/nvim --headless "+Lazy! sync" +qa
 
 WORKDIR ${WORKDIR}
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
