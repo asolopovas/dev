@@ -6,7 +6,7 @@
         },
         {
             "name": "dotfiles",
-            "path": "~/dotfiles"
+            "path": "../../dotfiles"
         },
     ],
 }
