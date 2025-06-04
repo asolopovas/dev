@@ -1,13 +1,5 @@
 FROM dunglas/frankenphp:1.4.2-builder-php8.3.16
 RUN apt-get update && apt-get install -y \
-    git \
-    unzip \
-    wget \
-    curl \
-    fish \
-    ffmpeg \
-    imagemagick \
-    jpegoptim \
     libavif-dev \
     libfreetype6-dev \
     libmagickwand-dev \
@@ -16,13 +8,7 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     libpng-dev \
     libwebp-dev \
-    libzip-dev \
-    neovim \
-    optipng \
-    pngquant \
-    ripgrep \
-    sudo \
-    wkhtmltopdf
+    libzip-dev
 
 RUN docker-php-ext-install \
     bcmath \
@@ -52,6 +38,24 @@ RUN pecl install xdebug && docker-php-ext-enable xdebug
 RUN pecl install redis && docker-php-ext-enable redis
 RUN pecl install apcu && docker-php-ext-enable apcu
 RUN pecl install igbinary && docker-php-ext-enable igbinary
+
+
+
+# Additional Software
+RUN  apt-get install -y \
+    git \
+    unzip \
+    curl \
+    sudo \
+    wget \
+    fish \
+    wkhtmltopdf \
+    ffmpeg \
+    imagemagick \
+    optipng \
+    pngquant \
+    ripgrep \
+    jpegoptim
 
 ARG UID=1000
 ARG GID=1000
