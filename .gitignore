@@ -1,0 +1,13 @@
+.env
+.idea
+.vscode
+franken_php/config/sites/**
+!franken_php/config/sites/.gitkeep
+!franken_php/config/sites/phpmyadmin.test.conf
+franken_php/config/ssl/**
+!franken_php/config/ssl/.gitkeep
+db/*.sql
+web-hosts.json
+build.log
+templates.yml
+crontab

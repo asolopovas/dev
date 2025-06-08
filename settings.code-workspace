@@ -1,0 +1,12 @@
+{
+    "folders": [
+        {
+            "name": "dev",
+            "path": "."
+        },
+        {
+            "name": "dotfiles",
+            "path": "../../dotfiles"
+        },
+    ],
+}

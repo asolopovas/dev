@@ -1,0 +1,17 @@
+{
+    "output": "~/www/dev/nginx/sites/",
+    "template": "~/www/dev/nginx/template.conf",
+    "workdir": "/var/www",
+    "hosts": [
+        {
+            "name": "example.test",
+            "type": "wordpress",
+            "db": "example_wp"
+        },
+        {
+            "name": "laravel.test",
+            "type": "laravel",
+            "db": "laravel_db"
+        }
+    ]
+}

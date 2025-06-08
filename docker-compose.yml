@@ -1,0 +1,105 @@
+volumes:
+    db:
+    phpmyadmin:
+    caddy_data:
+    caddy_config:
+
+networks:
+    dev_network:
+
+services:
+    franken_php:
+        image: franken_php
+        restart: unless-stopped
+        build:
+            context: ./franken_php
+            args:
+                APP_USER: ${APP_USER}
+                UID: ${UID}
+                GID: ${GID}
+                FZF: ${FZF}
+                FISH: ${FISH}
+                FDFIND: ${FDFIND}
+                PNPM_VERSION: ${PNPM_VERSION}
+                NODE: ${NODE}
+                NODE_VERSION: ${NODE_VERSION}
+                NVIM: ${NVIM}
+                OHMYFISH: ${OHMYFISH}
+                OHMYBASH: ${OHMYBASH}
+                WORKDIR: ${WORKDIR}
+        # uncomment the following line if you want to use a custom Dockerfile
+        #build: .
+        # uncomment the following line if you want to run this in a production environment
+        # restart: always
+        environment:
+            APP_ENV: ${APP_ENV}
+            XDEBUG_HOST: ${XDEBUG_HOST}
+            XDEBUG_MODE: ${XDEBUG_MODE}
+            XDEBUG_IDEKEY: ${XDEBUG_IDEKEY}
+            XDEBUG_TRIGGER: ${XDEBUG_TRIGGER}
+        ports:
+            - "80:80" # HTTP
+            - "8080:8080" # Development
+            - "443:443" # HTTPS
+            - "443:443/udp" # HTTP/3
+            - "3000:3000/udp" # HTTP/3
+            - "3001:3001/udp" # HTTP/3
+        volumes:
+            - ${MAPDIR}:/var/www
+            - ${HOME}/.ssh:/home/www/.ssh
+            - phpmyadmin:/var/www/html
+            - ./franken_php/config:/etc/caddy
+            - caddy_config:/config
+            - caddy_data:/data
+        # comment the following line in production, it allows to have nice human-readable logs in dev
+        tty: true
+        networks:
+            - dev_network
+
+    mariadb:
+        build:
+            context: ./mariadb
+        image: mariadb:lts
+        restart: always
+        environment:
+            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+        volumes:
+            - db:/var/lib/mysql
+        networks:
+            - dev_network
+        ports:
+            - 3306:3306
+
+    redis:
+        build: ./redis
+        restart: always
+        networks:
+            - dev_network
+        ports:
+            - 6379:6379
+
+    phpmyadmin:
+        image: phpmyadmin/phpmyadmin:5.2.2-fpm-alpine
+        volumes:
+            - phpmyadmin:/var/www/html
+        restart: always
+        environment:
+            PMA_HOST: ${DB_HOST}
+            PMA_USER: "root"
+            PMA_PASSWORD: "secret"
+            PMA_PORT: "3306"
+            PMA_ARBITRARY: 1
+            UPLOAD_LIMIT: 10048M
+            MAX_EXECUTION_TIME: 600
+            MEMORY_LIMIT: 512M
+        networks:
+            - dev_network
+
+    mailhog:
+        image: mailhog/mailhog
+        restart: always
+        ports:
+            - 1025:1025
+            - 8025:8025
+        networks:
+            - dev_network
