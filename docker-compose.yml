@@ -84,7 +84,7 @@ services:
             - phpmyadmin:/var/www/html
         restart: always
         environment:
-            PMA_HOST: ${DB_HOST}
+            PMA_HOST: "mariadb"
             PMA_USER: "root"
             PMA_PASSWORD: "secret"
             PMA_PORT: "3306"
