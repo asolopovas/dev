@@ -10,7 +10,7 @@ networks:
 services:
     franken_php:
         image: franken_php
-        restart: unless-stopped
+        restart: always
         build:
             context: ./franken_php
             args:
