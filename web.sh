@@ -263,7 +263,7 @@ host_root_ssl_generate() {
         -subj "$SUBJECT" \
         -out "$CRT_PATH" || return 1
 
-    echo "Root CA created successfully:"
+    echo "Root CA created successfully"
 }
 
 
