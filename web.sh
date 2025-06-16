@@ -226,8 +226,15 @@ function hostname_root {
 host_root_ssl_generate() {
     local FILENAME="${1:-rootCA}"
     local PASSPHRASE="${2:-default}"
-    local VALIDITY_DAYS=29200 # 80 years
+    local VALIDITY_DAYS=29200  # 80 years
     local SUBJECT="/C=GB/ST=London/L=London/O=Lyntouch/OU=IT Department/CN=Lyntouch Self-Signed RootCA/emailAddress=info@lyntouch.com"
+
+    # Calculate expiry date
+    local EXPIRY_DATE
+    EXPIRY_DATE=$(date -d "+$VALIDITY_DAYS days" "+%Y-%m-%d") || {
+        echo "Error: Failed to calculate expiry date." >&2
+        return 1
+    }
 
     # Ensure CERTS_DIR is defined
     if [[ -z "$CERTS_DIR" ]]; then
@@ -241,9 +248,11 @@ host_root_ssl_generate() {
     local CRT_PATH="$CERTS_DIR/$FILENAME.crt"
 
     echo "Creating Root Certificate Authority:"
-    echo "  Output directory: $CERTS_DIR"
     echo "  Filename base:    $FILENAME"
-    echo "  Expiry:           $VALIDITY_DAYS days"
+    echo "  Key:              $KEY_PATH"
+    echo "  Cert:             $CRT_PATH"
+    echo "  Expires on:       $EXPIRY_DATE"
+    echo "  Output directory: $CERTS_DIR"
 
     # Generate private key
     openssl genrsa -des3 -passout "pass:$PASSPHRASE" -out "$KEY_PATH" 4096 || return 1
@@ -254,10 +263,10 @@ host_root_ssl_generate() {
         -subj "$SUBJECT" \
         -out "$CRT_PATH" || return 1
 
-    echo "Root CA created:"
-    echo "  Key:  $KEY_PATH"
-    echo "  Cert: $CRT_PATH"
+    echo "Root CA created successfully:"
 }
+
+
 
 function add_host_ssl() {
     SSL_HOST=$1
