@@ -223,16 +223,40 @@ function hostname_root {
     echo "${parts[main_idx]}"
 }
 
-function host_root_ssl_generate() {
-    echo "Creating Root Certificate of Authority ..."
-    FILENAME="${1:-rootCA}"
-    KEY_PATH="$CERTS_DIR/$FILENAME.key"
-    CRT_PATH="$CERTS_DIR/$FILENAME.crt"
-    openssl genrsa -des3 -passout pass:default -out "$KEY_PATH" 4096
-    openssl req -x509 -new -nodes -passin pass:default \
-        -key "$KEY_PATH" -sha256 -days 20480 \
-        -subj "/C=GB/ST=London/L=London/O=Lyntouch/OU=IT Department/CN=Lyntouch Self-Signed RootCA/emailAddress=info@lyntouch.com" \
-        -out "$CRT_PATH"
+host_root_ssl_generate() {
+    local FILENAME="${1:-rootCA}"
+    local PASSPHRASE="${2:-default}"
+    local VALIDITY_DAYS=29200 # 80 years
+    local SUBJECT="/C=GB/ST=London/L=London/O=Lyntouch/OU=IT Department/CN=Lyntouch Self-Signed RootCA/emailAddress=info@lyntouch.com"
+
+    # Ensure CERTS_DIR is defined
+    if [[ -z "$CERTS_DIR" ]]; then
+        echo "Error: CERTS_DIR environment variable is not set." >&2
+        return 1
+    fi
+
+    mkdir -p "$CERTS_DIR"
+
+    local KEY_PATH="$CERTS_DIR/$FILENAME.key"
+    local CRT_PATH="$CERTS_DIR/$FILENAME.crt"
+
+    echo "Creating Root Certificate Authority:"
+    echo "  Output directory: $CERTS_DIR"
+    echo "  Filename base:    $FILENAME"
+    echo "  Expiry:           $VALIDITY_DAYS days"
+
+    # Generate private key
+    openssl genrsa -des3 -passout "pass:$PASSPHRASE" -out "$KEY_PATH" 4096 || return 1
+
+    # Generate self-signed root certificate
+    openssl req -x509 -new -nodes -passin "pass:$PASSPHRASE" \
+        -key "$KEY_PATH" -sha256 -days "$VALIDITY_DAYS" \
+        -subj "$SUBJECT" \
+        -out "$CRT_PATH" || return 1
+
+    echo "Root CA created:"
+    echo "  Key:  $KEY_PATH"
+    echo "  Cert: $CRT_PATH"
 }
 
 function add_host_ssl() {
@@ -259,7 +283,7 @@ function add_host_ssl() {
             -days 500 -sha256 -extfile <(printf "$EXT_FILE")
     fi
 
-    rm -f "$CSR_PATH"
+    # rm -f "$CSR_PATH"
 }
 
 function add_host_ssl_extfile() {
@@ -274,7 +298,6 @@ function add_host_ssl_extfile() {
         IP.1 = 127.0.0.1
 EOF
 }
-
 
 function add_host_redirect() {
     HOST="$1"
