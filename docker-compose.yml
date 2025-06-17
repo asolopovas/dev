@@ -1,8 +1,6 @@
 volumes:
     db:
     phpmyadmin:
-    caddy_data:
-    caddy_config:
 
 networks:
     dev_network:
@@ -41,8 +39,6 @@ services:
             - ${HOME}/.ssh:/home/www/.ssh
             - phpmyadmin:/var/www/html
             - ./franken_php/config:/etc/caddy
-            - caddy_config:/config
-            - caddy_data:/data
         # comment the following line in production, it allows to have nice human-readable logs in dev
         tty: true
         networks:
