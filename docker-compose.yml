@@ -17,15 +17,7 @@ services:
                 APP_USER: ${APP_USER}
                 UID: ${UID}
                 GID: ${GID}
-                FZF: ${FZF}
-                FISH: ${FISH}
-                FDFIND: ${FDFIND}
-                PNPM_VERSION: ${PNPM_VERSION}
-                NODE: ${NODE}
                 NODE_VERSION: ${NODE_VERSION}
-                NVIM: ${NVIM}
-                OHMYFISH: ${OHMYFISH}
-                OHMYBASH: ${OHMYBASH}
                 WORKDIR: ${WORKDIR}
         # uncomment the following line if you want to use a custom Dockerfile
         #build: .
