@@ -507,7 +507,7 @@ function host_remove() {
 
     host_redirect_del "$HOST"
 
-    # host_config_del
+    host_config_del
     build_webconf
 }
 
