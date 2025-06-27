@@ -497,11 +497,8 @@ function print_color() {
 
 function host_remove() {
     host_name=$1
-    host_config_del
-
     db_name=$(get_db_name $host_name)
     if [ ! -z $db_name ]; then
-        echo "Removing database $db_name"
         db_cmd remove $host_name
     fi
 
@@ -510,6 +507,7 @@ function host_remove() {
 
     host_redirect_del "$HOST"
 
+    # host_config_del
     build_webconf
 }
 
@@ -525,7 +523,7 @@ function host_config_del {
 }
 
 function get_db_name() {
-    host_nmae="$1"
+    host_name="$1"
     jq -r --arg host "$host_name" '.hosts[] | select(.name == $host) | .db' $WEB_ROOT/dev/web-hosts.json
 }
 function db_cmd {
@@ -546,7 +544,7 @@ function db_cmd {
         $DC exec mariadb mariadb -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS ${db_name};"
         $DC exec mariadb mariadb -uroot -psecret -e "GRANT ALL PRIVILEGES ON ${db_name}.* TO ${db_name}@'%'"
     else
-        echo "Removing $db_name user and database"
+        echo "Removing - database: $db_name user: $db_name"
         $DC exec mariadb mariadb -uroot -psecret -e "DROP DATABASE IF EXISTS ${db_name};"
         $DC exec mariadb mariadb -uroot -psecret -e "DROP USER IF EXISTS ${db_name}@'%';"
     fi
