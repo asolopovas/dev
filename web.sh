@@ -407,8 +407,6 @@ function new_wp {
     dest_conf=$project_path/wp-config.php
 
     [ ! -f $dest_conf ] && mv $sample_conf $dest_conf
-    echo $username
-    echo $password
 
     sed -i "s/username_here/$username/g;s/database_name_here/$username/g;s/password_here/$password/g;s/localhost/mariadb/g;" $dest_conf
 
@@ -443,7 +441,6 @@ EOF
 function new_laravel {
     echo "Setting up Laravel for $host..."
     host_name=$(hostname_root $host)
-    echo $host_name
 
     project_path="$WEB_ROOT/$HOST"
     echo $project_path
