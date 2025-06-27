@@ -398,14 +398,16 @@ function new_wp {
 
     # Setup Wordpress Config
     host_name=$(hostname_root $HOST)
+    db_name=$(get_db_name $host_name wp)
     username="root"
     password="secret"
+    echo "$username:$password $db_name"
     sample_conf=$project_path/wp-config-sample.php
     dest_conf=$project_path/wp-config.php
 
     [ ! -f $dest_conf ] && mv $sample_conf $dest_conf
 
-    sed -i "s/username_here/$username/g;s/database_name_here/$username/g;s/password_here/$password/g;s/localhost/mariadb/g;" $dest_conf
+    sed -i "s/username_here/$username/g;s/database_name_here/$db_name/g;s/password_here/$password/g;s/localhost/mariadb/g;" $dest_conf
 
 }
 generate_supervisor_conf() {
@@ -493,7 +495,7 @@ function print_color() {
 }
 
 function host_remove() {
-    db_name=$(get_db_name $HOST)
+    db_name=$(get_web_host_db $HOST)
     if [ ! -z $db_name ]; then
         db_cmd remove $HOST
     fi
@@ -518,9 +520,32 @@ function host_config_del {
     fi
 }
 
-function get_db_name() {
+function get_web_host_db() {
     host_name="$1"
     jq -r --arg host "$host_name" '.hosts[] | select(.name == $host) | .db' $WEB_ROOT/dev/web-hosts.json
+}
+
+function get_db_name() {
+    host_name=$1
+    shift
+    appendix=
+
+    while [ "$#" -gt 0 ]; do
+        case $1 in
+            --appendix=*) appendix=${1#*=} ;;
+            --appendix)   shift; appendix=$1 ;;
+            db|wp)        appendix=$1 ;;
+            *) printf '%s\n' "Unknown option: $1" >&2; return 1 ;;
+        esac
+        shift
+    done
+
+    [ -z "$host_name" ] && { printf '%s\n' "Missing hostname" >&2; return 1; }
+    [ -z "$appendix" ]  && { printf '%s\n' "Missing --appendix db|wp" >&2; return 1; }
+
+    prefix=${host_name%%.*}
+
+    printf '%s\n' "${prefix}_${appendix}"
 }
 
 function db_cmd {
@@ -540,7 +565,7 @@ function db_cmd {
         $DC exec mariadb mariadb -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS ${db_name};"
         $DC exec mariadb mariadb -uroot -psecret -e "GRANT ALL PRIVILEGES ON ${db_name}.* TO ${db_name}@'%'"
     else
-        echo "Removing - database: $db_name user: $db_name"
+        echo "📦 Removing - database: $db_name user: $db_name"
         $DC exec mariadb mariadb -uroot -psecret -e "DROP DATABASE IF EXISTS ${db_name};"
         $DC exec mariadb mariadb -uroot -psecret -e "DROP USER IF EXISTS ${db_name}@'%';"
     fi
