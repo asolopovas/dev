@@ -145,7 +145,7 @@ function build_webconf {
 
             if [ -z "$DB_EXISTS" ]; then
                 echo "📦 Creating missing DB: ${db}"
-                docker exec dev-mariadb-1 mariadb -u root -psecret -e "CREATE DATABASE \`${db}\`;"
+                db_cmd create $host_name
             fi
         } || {
             echo "❌ Error processing host: $host_name. Skipping..."
@@ -163,6 +163,7 @@ function check_host {
         exit 1
     fi
 }
+
 function confirm_action {
     read -p "$1 [Y/N]" -n 1 -r REPLY
     echo ""
@@ -269,8 +270,6 @@ host_root_ssl_generate() {
 
     echo "Root CA created successfully"
 }
-
-
 
 function add_host_ssl() {
     SSL_HOST=$1
@@ -399,8 +398,7 @@ function new_wp {
 
     # Setup Wordpress Config
     host_name=$(hostname_root $HOST)
-
-    username=$host_name"_wp"
+    username="root"
     password="secret"
     sample_conf=$project_path/wp-config-sample.php
     dest_conf=$project_path/wp-config.php
@@ -495,10 +493,9 @@ function print_color() {
 }
 
 function host_remove() {
-    host_name=$1
-    db_name=$(get_db_name $host_name)
+    db_name=$(get_db_name $HOST)
     if [ ! -z $db_name ]; then
-        db_cmd remove $host_name
+        db_cmd remove $HOST
     fi
 
     echo "Removing $WEB_ROOT/$HOST"
@@ -525,6 +522,7 @@ function get_db_name() {
     host_name="$1"
     jq -r --arg host "$host_name" '.hosts[] | select(.name == $host) | .db' $WEB_ROOT/dev/web-hosts.json
 }
+
 function db_cmd {
     action=$1
     host_name=$2
@@ -538,7 +536,6 @@ function db_cmd {
     fi
 
     if [ $action == "create" ]; then
-        echo "Creating DB: $db_name"
         $DC exec mariadb mariadb -uroot -psecret -e "CREATE USER IF NOT EXISTS ${db_name}@'%' IDENTIFIED BY 'secret';"
         $DC exec mariadb mariadb -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS ${db_name};"
         $DC exec mariadb mariadb -uroot -psecret -e "GRANT ALL PRIVILEGES ON ${db_name}.* TO ${db_name}@'%'"
