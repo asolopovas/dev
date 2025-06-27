@@ -401,7 +401,6 @@ function new_wp {
     db_name=$(get_db_name $host_name wp)
     username="root"
     password="secret"
-    echo "$username:$password $db_name"
     sample_conf=$project_path/wp-config-sample.php
     dest_conf=$project_path/wp-config.php
 
