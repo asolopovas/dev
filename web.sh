@@ -319,7 +319,6 @@ function add_host_redirect() {
         if grep -qP "^\s*127\.0\.0\.1.*$HOST(?:\s+|$)" "$WIN_HOSTS_FILE"; then
             return 0
         fi
-        echo "$HOST"
         echo "Adding host redirection for \"$HOST\""
         powershell.exe -Command "New-HostnameMapping $HOST"
     else
