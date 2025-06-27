@@ -366,7 +366,7 @@ function new_host {
         ;;
     esac
 
-    edd_host_config "$TYPE" "$HOST"
+    add_host_config "$TYPE" "$HOST"
     add_host_redirect "$HOST"
 
     build_webconf
