@@ -54,7 +54,11 @@ function add_host_config {
         db_name="${main_domain}_$(echo "$sub_domain" | tr '.' '_')"
     fi
 
-    [[ "$host_type" == "wordpress" ]] && db_name="${db_name}_wp" || db_name="${db_name}_db"
+    if [[ "$host_type" == "wordpress" || "$host_type" == "wp" ]]; then
+        db_name="${db_name}_wp"
+    else
+        db_name="${db_name}_db"
+    fi
     db_name="$(echo "$db_name" | tr '.' '_')"
 
     json_file="$WEB_ROOT/dev/web-hosts.json"
