@@ -352,12 +352,12 @@ function new_host {
         return 1
     fi
 
-    generate_supervisor_conf $HOST
     case "$TYPE" in
     wp)
         new_wp "$HOST"
         ;;
     laravel)
+        generate_supervisor_conf $HOST
         new_laravel "$HOST"
         ;;
     *)
@@ -413,7 +413,7 @@ generate_supervisor_conf() {
     host="$1"
     host_name=$(echo "$1" | tr '.' '_')
     output_dir="${2:-/etc/supervisor/conf.d}"
-    log_dir="$WEB_ROOT/$host/storage/logs"
+    log_dir="/tmp/supervisor-logs/$host"
     program_name="$host_name"
 
     sudo mkdir -p "$log_dir"
