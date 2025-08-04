@@ -36,6 +36,7 @@ services:
             - "3001:3001/udp" # HTTP/3
         volumes:
             - ${MAPDIR}:/var/www
+            - ${CLAUDE}:/var/www/.claude
             - ${HOME}/.ssh:/home/www/.ssh
             - phpmyadmin:/var/www/html
             - ./franken_php/config:/etc/caddy
