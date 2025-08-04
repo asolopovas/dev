@@ -87,5 +87,7 @@ ENV WORKDIR=/var/www
 
 RUN NODE_VERSION=${NODE_VERSION} bash -c "$(curl -fsSLH 'Cache-Control: no-cache' http://raw.githubusercontent.com/asolopovas/dotfiles/master/init.sh)"
 
+RUN npm install -g @anthropic-ai/claude-code
+
 WORKDIR ${WORKDIR}
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
