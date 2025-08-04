@@ -37,6 +37,7 @@ services:
         volumes:
             - ${MAPDIR}:/var/www
             - ${CLAUDE}:/home/www/.claude
+            - ${CLAUDE_JSON}:/home/www/.claude.json
             - ${HOME}/.ssh:/home/www/.ssh
             - phpmyadmin:/var/www/html
             - ./franken_php/config:/etc/caddy
