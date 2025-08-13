@@ -86,16 +86,22 @@ USER ${UID}:${GID}
 ENV WORKDIR=/var/www
 
 RUN touch ${HOME}/.env-vars
-FROM ubuntu:22.04
 
 # Install fd
-RUN VER="10.2.0" && \
-    FILE="fd-musl_${VER}_amd64.deb" && \
-    URL="https://github.com/sharkdp/fd/releases/download/v${VER}/${FILE}" && \
-    curl -fsSLO "$URL" && \
-    dpkg -i "$FILE" && \
-    rm -f "$FILE"
+RUN VER="10.2.0" \
+ && FILE="fd-musl_${VER}_amd64.deb" \
+ && URL="https://github.com/sharkdp/fd/releases/download/v${VER}/${FILE}" \
+ && curl -fsSL "$URL" -o "/tmp/${FILE}" \
+ && sudo dpkg -i "/tmp/${FILE}" \
+ && rm -f "/tmp/${FILE}"
 
+ # Install fzf
+RUN VER="0.42.0" \
+ && mkdir -p "$HOME/.local/bin" \
+ && curl -fsSL "https://github.com/junegunn/fzf/releases/download/${VER}/fzf-${VER}-linux_amd64.tar.gz" -o /tmp/fzf.tgz \
+ && tar -xf /tmp/fzf.tgz -C /tmp \
+ && install -m 0755 /tmp/fzf "$HOME/.local/bin/fzf" \
+ && rm -f /tmp/fzf.tgz /tmp/fzf
 
 WORKDIR ${WORKDIR}
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
