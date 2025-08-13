@@ -39,6 +39,7 @@ services:
             - ${CLAUDE}:/home/www/.claude
             - ${CLAUDE_JSON}:/home/www/.claude.json
             - ${HOME}/.ssh:/home/www/.ssh
+            - ${HOME}/dotfiles:/home/www/dotfiles
             - phpmyadmin:/var/www/html
             - ./franken_php/config:/etc/caddy
         # comment the following line in production, it allows to have nice human-readable logs in dev
