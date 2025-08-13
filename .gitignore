@@ -6,6 +6,7 @@ franken_php/config/sites/**
 !franken_php/config/sites/phpmyadmin.test.conf
 franken_php/config/ssl/**
 !franken_php/config/ssl/.gitkeep
+typesense-data/*
 db/*.sql
 web-hosts.json
 build.log
