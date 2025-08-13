@@ -6,4 +6,6 @@ set -e
 
 $HOME/dotfiles/scripts/update-symlinks.sh
 
+npm install -g @anthropic-ai/claude-code
+
 exec docker-php-entrypoint --config /etc/caddy/Caddyfile --adapter caddyfile "$@"
