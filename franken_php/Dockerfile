@@ -82,6 +82,16 @@ ENV XDG_CACHE_HOME=/home/${APP_USER}/.cache
 COPY conf.d/  /usr/local/etc/php/conf.d/
 COPY php-env.sh entrypoint.sh /usr/local/bin/
 
+
+USER ${UID}:${GID}
+ENV WORKDIR=/var/www
+
+RUN touch ${HOME}/.env-vars
+
+RUN curl https://get.volta.sh | bash
+RUN volta install node@22 npm@11.5
+RUN curl -fsSL https://bun.com/install | bash # for macOS, Linux, and WSL
+
 RUN set -eux; \
     cd /tmp; \
     php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"; \
@@ -92,18 +102,9 @@ RUN set -eux; \
               fwrite(STDERR, 'ERROR: Invalid installer signature'.PHP_EOL); \
               exit(1); \
             }"; \
-    php composer-setup.php --install-dir=/usr/local/bin --filename=composer; \
+    php composer-setup.php --install-dir=/home/${APP_USER}/.local/bin --filename=composer; \
     php -r "unlink('composer-setup.php'); unlink('composer-setup.sig');"; \
     composer --version
-
-USER ${UID}:${GID}
-ENV WORKDIR=/var/www
-
-RUN touch ${HOME}/.env-vars
-
-RUN curl https://get.volta.sh | bash
-RUN volta install node@22 npm@11.5
-RUN curl -fsSL https://bun.com/install | bash # for macOS, Linux, and WSL
 
 # Install fd
 RUN VER="10.2.0" \
