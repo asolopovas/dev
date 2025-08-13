@@ -85,5 +85,7 @@ COPY php-env.sh entrypoint.sh /usr/local/bin/
 USER ${UID}:${GID}
 ENV WORKDIR=/var/www
 
+RUN touch ${HOME}/.env-vars
+
 WORKDIR ${WORKDIR}
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
