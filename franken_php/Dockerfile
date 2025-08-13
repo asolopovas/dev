@@ -96,7 +96,7 @@ RUN VER="10.2.0" \
  && rm -f "/tmp/${FILE}"
 
  # Install fzf
-RUN VER="0.42.0" \
+RUN VER="0.65.1" \
  && mkdir -p "$HOME/.local/bin" \
  && curl -fsSL "https://github.com/junegunn/fzf/releases/download/${VER}/fzf-${VER}-linux_amd64.tar.gz" -o /tmp/fzf.tgz \
  && tar -xf /tmp/fzf.tgz -C /tmp \
