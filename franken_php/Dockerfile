@@ -87,6 +87,10 @@ ENV WORKDIR=/var/www
 
 RUN touch ${HOME}/.env-vars
 
+RUN curl https://get.volta.sh | bash
+RUN volta install node@22 npm@11.5
+RUN curl -fsSL https://bun.com/install | bash # for macOS, Linux, and WSL
+
 # Install fd
 RUN VER="10.2.0" \
  && FILE="fd-musl_${VER}_amd64.deb" \
