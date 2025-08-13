@@ -74,7 +74,7 @@ RUN mkdir /etc/sudoers.d; \
     echo "Set disable_coredump false" > /etc/sudo.conf
 
 ENV VOLTA_HOME=/home/${APP_USER}/.volta
-ENV PATH=$VOLTA_HOME/bin:$PATH
+ENV PATH=$VOLTA_HOME/bin:/home/${APP_USER}/.local/bin:$PATH
 ENV XDG_DATA_HOME=/home/${APP_USER}/.local/share
 ENV XDG_CONFIG_HOME=/home/${APP_USER}/.config
 ENV XDG_CACHE_HOME=/home/${APP_USER}/.cache
@@ -93,6 +93,7 @@ RUN volta install node@22 npm@11.5
 RUN curl -fsSL https://bun.com/install | bash # for macOS, Linux, and WSL
 
 RUN set -eux; \
+    mkdir -p /home/${APP_USER}/.local/bin; \
     cd /tmp; \
     php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"; \
     php -r "copy('https://composer.github.io/installer.sig', 'composer-setup.sig');"; \
