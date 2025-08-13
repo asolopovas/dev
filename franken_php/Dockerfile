@@ -91,6 +91,19 @@ RUN curl https://get.volta.sh | bash
 RUN volta install node@22 npm@11.5
 RUN curl -fsSL https://bun.com/install | bash # for macOS, Linux, and WSL
 
+RUN set -eux; \
+    php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"; \
+    php -r "copy('https://composer.github.io/installer.sig', 'composer-setup.sig');"; \
+    php -r "$sig = trim(file_get_contents('composer-setup.sig')); \
+            if (hash_file('sha384', 'composer-setup.php') !== $sig) { \
+              unlink('composer-setup.php'); \
+              fwrite(STDERR, 'ERROR: Invalid installer signature'.PHP_EOL); \
+              exit(1); \
+            }"; \
+    php composer-setup.php --install-dir=/usr/local/bin --filename=composer; \
+    php -r "unlink('composer-setup.php'); unlink('composer-setup.sig');"; \
+    composer --version
+
 # Install fd
 RUN VER="10.2.0" \
  && FILE="fd-musl_${VER}_amd64.deb" \
