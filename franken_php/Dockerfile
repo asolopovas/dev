@@ -86,6 +86,16 @@ USER ${UID}:${GID}
 ENV WORKDIR=/var/www
 
 RUN touch ${HOME}/.env-vars
+FROM ubuntu:22.04
+
+# Install fd
+RUN VER="10.2.0" && \
+    FILE="fd-musl_${VER}_amd64.deb" && \
+    URL="https://github.com/sharkdp/fd/releases/download/v${VER}/${FILE}" && \
+    curl -fsSLO "$URL" && \
+    dpkg -i "$FILE" && \
+    rm -f "$FILE"
+
 
 WORKDIR ${WORKDIR}
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
