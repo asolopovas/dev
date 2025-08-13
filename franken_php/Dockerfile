@@ -43,19 +43,20 @@ RUN pecl install igbinary && docker-php-ext-enable igbinary
 
 # Additional Software
 RUN apt-get install -y \
-    git \
-    unzip \
     curl \
-    sudo \
-    wget \
-    fish \
-    wkhtmltopdf \
     ffmpeg \
+    fish \
+    git \
     imagemagick \
+    jpegoptim \
     optipng \
     pngquant \
     ripgrep \
-    jpegoptim
+    ssh \
+    sudo \
+    unzip \
+    wget \
+    wkhtmltopdf
 
 ARG UID=1000
 ARG GID=1000
