@@ -93,3 +93,14 @@ services:
             - 8025:8025
         networks:
             - dev_network
+
+    typesense:
+        image: typesense/typesense:29.0
+        restart: on-failure
+        ports:
+            - "8108:8108"
+        volumes:
+            - ./typesense-data:/data
+        command: '--data-dir /data --api-key=xyz --enable-cors'
+        networks:
+            - dev_network
