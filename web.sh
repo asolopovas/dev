@@ -547,6 +547,27 @@ function get_db_name() {
     printf '%s\n' "${prefix}_${appendix}"
 }
 
+function build_service {
+    service=$1
+    no_cache=$2
+    
+    if [ "$no_cache" == "--no-cache" ]; then
+        cache_flag="--no-cache"
+    else
+        cache_flag=""
+    fi
+    
+    if [ -z "$service" ]; then
+        echo "Building all services..."
+        $DC build $cache_flag
+        $DC up -d --force-recreate
+    else
+        echo "Building service: $service"
+        $DC build $cache_flag $service
+        $DC up -d --force-recreate $service
+    fi
+}
+
 function db_cmd {
     action=$1
     host_name=$2
