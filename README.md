@@ -1,4 +1,4 @@
-# 🛠️ Web.sh — A Powerful PHP Development Environment
+# 🛠️ Web.sh - PHP Development Environment
 
 `web.sh` is a powerful and developer-friendly shell utility designed to streamline local development of PHP applications using Docker. It offers built-in support for **WordPress**, **Laravel**, and more, with automatic setup of SSL certificates, host redirection, Docker services, and supervisor configuration — all from a single command-line tool.
 
