@@ -70,7 +70,7 @@ services:
             - 6379:6379
 
     phpmyadmin:
-        image: phpmyadmin/phpmyadmin:5.2.2-fpm-alpine
+        image: phpmyadmin/phpmyadmin:fpm-alpine
         volumes:
             - phpmyadmin:/var/www/html
         restart: always
