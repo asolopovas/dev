@@ -36,8 +36,6 @@ services:
             - "3001:3001/udp" # HTTP/3
         volumes:
             - ${MAPDIR}:/var/www
-            - ${CLAUDE}:/home/www/.claude
-            - ${CLAUDE_JSON}:/home/www/.claude.json
             - ${HOME}/.ssh:/home/www/.ssh
             - ${HOME}/dotfiles:/home/www/dotfiles
             - phpmyadmin:/var/www/html
