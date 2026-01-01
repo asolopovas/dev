@@ -4,7 +4,7 @@ set -e
 
 /usr/local/bin/php-env.sh
 
-$HOME/dotfiles/scripts/update-symlinks.sh
+$HOME/dotfiles/scripts/ops-update-symlinks.sh
 
 npm install -g @anthropic-ai/claude-code
 
