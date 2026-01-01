@@ -94,7 +94,7 @@ ENV WORKDIR=/var/www
 RUN touch ${HOME}/.env-vars
 
 RUN curl https://get.volta.sh | bash
-RUN volta install node@22 npm@11.5
+RUN volta install node@24.12.0 npm@11.7
 RUN curl -fsSL https://bun.com/install | bash # for macOS, Linux, and WSL
 
 RUN set -eux; \
