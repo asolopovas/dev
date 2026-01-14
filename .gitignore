@@ -11,4 +11,4 @@ db/*.sql
 web-hosts.json
 build.log
 templates.yml
-crontab
+*.log
