@@ -1,0 +1,12 @@
+
+* * * * * cd /var/www/3oak.test && php /var/www/3oak.test/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2
+* * * * * cd /var/www/alisiagreen.test && php /var/www/alisiagreen.test/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2
+* * * * * cd /var/www/avianese.test && php /var/www/avianese.test/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2
+* * * * * cd /var/www/lcl.test && php /var/www/lcl.test/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2
+* * * * * cd /var/www/woodlandflooring.test && php /var/www/woodlandflooring.test/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2
+* * * * * cd /var/www/peaceandcolour.test && php /var/www/peaceandcolour.test/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2
+* * * * * cd /var/www/ecojoineryfloors.test && php /var/www/ecojoineryfloors.test/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2
+* * * * * cd /var/www/shopbloomsart.test && php /var/www/shopbloomsart.test/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2
+* * * * * cd /var/www/test.test && php /var/www/test.test/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2
+* * * * * cd /var/www/lyntouch.test && php /var/www/lyntouch.test/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2
+* * * * * cd /var/www/nubiogroup.test && php /var/www/nubiogroup.test/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2
