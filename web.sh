@@ -17,6 +17,12 @@ DC="docker compose -f $SCRIPT_DIR/docker-compose.yml"
 CERTS_DIR="$BACKEND_CONFIG_DIR/ssl"
 ROOT_KEY="$CERTS_DIR/rootCA.key"
 ROOT_CRT="$CERTS_DIR/rootCA.crt"
+HOSTS_MODULE_PATH_CACHED=""
+if command -v pwsh.exe >/dev/null 2>&1; then
+    POWERSHELL_EXE="pwsh.exe"
+else
+    POWERSHELL_EXE="powershell.exe"
+fi
 
 function add_host_config {
     host_type="${1:-wordpress}"
@@ -311,6 +317,64 @@ function add_host_ssl_extfile() {
 EOF
 }
 
+function resolve_hosts_module_path() {
+    local search_paths
+    local match
+    local module_path=""
+
+    if [ -n "$HOSTS_MODULE_PATH_CACHED" ]; then
+        echo "$HOSTS_MODULE_PATH_CACHED"
+        return 0
+    fi
+
+    if [ -n "$HOSTS_MODULE_WIN_PATH" ]; then
+        module_path=$(wslpath "$HOSTS_MODULE_WIN_PATH")
+        HOSTS_MODULE_PATH_CACHED="$module_path"
+        echo "$HOSTS_MODULE_PATH_CACHED"
+        return 0
+    fi
+
+    if [ -n "$HOSTS_MODULE_WSL_PATH" ]; then
+        HOSTS_MODULE_PATH_CACHED="$HOSTS_MODULE_WSL_PATH"
+        echo "$HOSTS_MODULE_PATH_CACHED"
+        return 0
+    fi
+
+    search_paths=(
+        "/mnt/c/Users/*/Documents/PowerShell/Modules/Hosts/*/Hosts.psd1"
+        "/mnt/c/Users/*/Documents/WindowsPowerShell/Modules/Hosts/*/Hosts.psd1"
+        "/mnt/c/Users/*/Documents/PowerShell/Modules/Hosts/*/Hosts.psm1"
+        "/mnt/c/Users/*/Documents/WindowsPowerShell/Modules/Hosts/*/Hosts.psm1"
+    )
+
+    shopt -s nullglob
+    for candidate in "${search_paths[@]}"; do
+        for match in $candidate; do
+            module_path="$match"
+            break 2
+        done
+    done
+    shopt -u nullglob
+
+    HOSTS_MODULE_PATH_CACHED="$module_path"
+    echo "$HOSTS_MODULE_PATH_CACHED"
+}
+
+function run_host_mapping_cmdlet() {
+    local cmdlet="$1"
+    local hostname="$2"
+    local module_path
+    local module_path_win
+
+    module_path=$(resolve_hosts_module_path)
+    if [ -n "$module_path" ]; then
+        module_path_win=$(wslpath -w "$module_path")
+        $POWERSHELL_EXE -Command "Import-Module '$module_path_win' -ErrorAction Stop; ${cmdlet} ${hostname}"
+    else
+        $POWERSHELL_EXE -Command "Import-Module Hosts -ErrorAction Stop; ${cmdlet} ${hostname}"
+    fi
+}
+
 function add_host_redirect() {
     HOST="$1"
     if is_wsl; then
@@ -319,7 +383,10 @@ function add_host_redirect() {
             return 0
         fi
         echo "Adding host redirection for \"$HOST\""
-        powershell.exe -Command "New-HostnameMapping $HOST"
+        if ! run_host_mapping_cmdlet "New-HostnameMapping" "$HOST"; then
+            echo "Failed to add host mapping for $HOST. Ensure the Hosts module is available."
+            return 1
+        fi
     else
         exists=$(getent hosts "$HOST")
         if [ -z "$exists" ]; then
@@ -333,7 +400,10 @@ function host_redirect_del {
     HOST="$1"
     echo "Removing host redirection for \"$HOST\""
     if is_wsl; then
-        powershell.exe -Command "Remove-HostnameMapping $HOST"
+        if ! run_host_mapping_cmdlet "Remove-HostnameMapping" "$HOST"; then
+            echo "Failed to remove host mapping for $HOST. Ensure the Hosts module is available."
+            return 1
+        fi
     else
         if grep -q "$HOST" /etc/hosts; then
             sudo sed -i.bak "/$HOST/d" /etc/hosts
