@@ -18,8 +18,6 @@ CERTS_DIR="$BACKEND_CONFIG_DIR/ssl"
 ROOT_KEY="$CERTS_DIR/rootCA.key"
 ROOT_CRT="$CERTS_DIR/rootCA.crt"
 HOSTS_MODULE_PATH_CACHED=""
-HOSTS_TO_REDIRECT=()
-BATCH_HOSTS_REDIRECT=0
 if command -v pwsh.exe >/dev/null 2>&1; then
     POWERSHELL_EXE="pwsh.exe"
 else
@@ -102,11 +100,6 @@ function build_webconf {
         exit 1
     fi
 
-    if is_wsl; then
-        BATCH_HOSTS_REDIRECT=1
-        HOSTS_TO_REDIRECT=()
-    fi
-
     if ! jq -e '.hosts[] | select(.name == "phpmyadmin.test")' "$config_path"; then
         add_host_redirect "phpmyadmin.test"
         add_host_ssl "phpmyadmin.test"
@@ -165,15 +158,6 @@ function build_webconf {
             continue
         }
     done
-
-    if [ "$BATCH_HOSTS_REDIRECT" -eq 1 ]; then
-        if ! flush_host_redirects; then
-            echo "Failed to add host mappings. Ensure the Hosts module is available."
-            return 1
-        fi
-        BATCH_HOSTS_REDIRECT=0
-        HOSTS_TO_REDIRECT=()
-    fi
 
     echo "✅ Finished Building Web Configs. Restarting Caddy..."
     $DC restart franken_php
@@ -363,53 +347,6 @@ function resolve_hosts_module_path() {
     echo "$HOSTS_MODULE_PATH_CACHED"
 }
 
-function enqueue_host_redirect() {
-    local host="$1"
-    local existing
-
-    for existing in "${HOSTS_TO_REDIRECT[@]}"; do
-        if [ "$existing" = "$host" ]; then
-            return 0
-        fi
-    done
-
-    HOSTS_TO_REDIRECT+=("$host")
-}
-
-function flush_host_redirects() {
-    local module_path
-    local module_path_win
-    local import_cmd
-    local hosts_list
-    local ps_command
-
-    if ! is_wsl; then
-        return 0
-    fi
-
-    if [ ${#HOSTS_TO_REDIRECT[@]} -eq 0 ]; then
-        return 0
-    fi
-
-    module_path=$(resolve_hosts_module_path)
-    if [ -n "$module_path" ]; then
-        module_path_win=$(wslpath -w "$module_path")
-        import_cmd="Import-Module '$module_path_win' -ErrorAction Stop"
-    else
-        import_cmd="Import-Module Hosts -ErrorAction Stop"
-    fi
-
-    hosts_list=""
-    for host in "${HOSTS_TO_REDIRECT[@]}"; do
-        hosts_list+="'${host}',"
-    done
-    hosts_list=${hosts_list%,}
-
-    ps_command="& { $import_cmd; \$hosts = @($hosts_list); \$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); if (\$isAdmin) { foreach (\$host in \$hosts) { New-HostnameMapping \$host } } else { Start-Process -FilePath (Get-Process -Id \$PID).Path -Verb RunAs -ArgumentList @('-NoProfile','-Command', \"$import_cmd; \$hosts = @($hosts_list); foreach (\$host in \$hosts) { New-HostnameMapping \$host }\") -Wait } }"
-
-    $POWERSHELL_EXE -NoProfile -Command "$ps_command"
-}
-
 function run_host_mapping_cmdlet() {
     local cmdlet="$1"
     local hostname="$2"
@@ -426,7 +363,16 @@ function run_host_mapping_cmdlet() {
         import_cmd="Import-Module Hosts -ErrorAction Stop"
     fi
 
-    ps_command="& { $import_cmd; \$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); if (\$isAdmin) { ${cmdlet} '${hostname}' } else { Start-Process -FilePath (Get-Process -Id \$PID).Path -Verb RunAs -ArgumentList @('-NoProfile','-Command', \"$import_cmd; ${cmdlet} '${hostname}'\") -Wait } }"
+    # Build a command that checks for admin rights and elevates if needed, with -Wait to block until done
+    ps_command="& {
+        $import_cmd
+        \$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        if (\$isAdmin) {
+            ${cmdlet} '${hostname}'
+        } else {
+            Start-Process -FilePath (Get-Process -Id \$PID).Path -Verb RunAs -Wait -ArgumentList '-NoProfile', '-Command', \"$import_cmd; ${cmdlet} '${hostname}'\"
+        }
+    }"
 
     $POWERSHELL_EXE -NoProfile -Command "$ps_command"
 }
@@ -439,10 +385,6 @@ function add_host_redirect() {
             return 0
         fi
         echo "Adding host redirection for \"$HOST\""
-        if [ "$BATCH_HOSTS_REDIRECT" -eq 1 ]; then
-            enqueue_host_redirect "$HOST"
-            return 0
-        fi
         if ! run_host_mapping_cmdlet "New-HostnameMapping" "$HOST"; then
             echo "Failed to add host mapping for $HOST. Ensure the Hosts module is available."
             return 1
