@@ -66,6 +66,7 @@ function add_host_config {
         db_name="${db_name}_db"
     fi
     db_name="$(echo "$db_name" | tr '.' '_')"
+    db_name="$(sanitize_db_identifier "$db_name")"
 
     json_file="$WEB_ROOT/dev/web-hosts.json"
 
@@ -232,6 +233,24 @@ function hostname_root {
     fi
 
     echo "${parts[main_idx]}"
+}
+
+function sanitize_db_identifier {
+    local raw="$1"
+    local cleaned
+
+    cleaned=$(printf '%s' "$raw" | LC_ALL=C tr -c 'A-Za-z0-9_' '_')
+    cleaned=${cleaned#_}
+
+    if [[ -z "$cleaned" ]]; then
+        cleaned="db"
+    fi
+
+    if [[ "$cleaned" =~ ^[0-9] ]]; then
+        cleaned="db_${cleaned}"
+    fi
+
+    printf '%s\n' "$cleaned"
 }
 
 host_root_ssl_generate() {
@@ -615,6 +634,7 @@ function get_db_name() {
     [ -z "$appendix" ]  && { printf '%s\n' "Missing --appendix db|wp" >&2; return 1; }
 
     prefix=${host_name%%.*}
+    prefix=$(sanitize_db_identifier "$prefix")
 
     printf '%s\n' "${prefix}_${appendix}"
 }
@@ -653,13 +673,13 @@ function db_cmd {
     fi
 
     if [ $action == "create" ]; then
-        $DC exec mariadb mariadb -uroot -psecret -e "CREATE USER IF NOT EXISTS ${db_name}@'%' IDENTIFIED BY 'secret';"
-        $DC exec mariadb mariadb -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS ${db_name};"
-        $DC exec mariadb mariadb -uroot -psecret -e "GRANT ALL PRIVILEGES ON ${db_name}.* TO ${db_name}@'%'"
+        $DC exec mariadb mariadb -uroot -psecret -e "CREATE USER IF NOT EXISTS '${db_name}'@'%' IDENTIFIED BY 'secret';"
+        $DC exec mariadb mariadb -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`;"
+        $DC exec mariadb mariadb -uroot -psecret -e "GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${db_name}'@'%'"
     else
         echo "📦 Removing - database: $db_name user: $db_name"
-        $DC exec mariadb mariadb -uroot -psecret -e "DROP DATABASE IF EXISTS ${db_name};"
-        $DC exec mariadb mariadb -uroot -psecret -e "DROP USER IF EXISTS ${db_name}@'%';"
+        $DC exec mariadb mariadb -uroot -psecret -e "DROP DATABASE IF EXISTS \`${db_name}\`;"
+        $DC exec mariadb mariadb -uroot -psecret -e "DROP USER IF EXISTS '${db_name}'@'%';"
     fi
 }
 
