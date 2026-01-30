@@ -12,3 +12,4 @@ web-hosts.json
 build.log
 templates.yml
 *.log
+crontab
