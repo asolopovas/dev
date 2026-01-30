@@ -713,7 +713,7 @@ function import_ROOT_KEY_to_chrome() {
 
 case "$CMD" in
 bash)
-    $DC exec app bash
+    $DC exec franken_php bash
     ;;
 build)
     build_service $2 $3
@@ -849,10 +849,10 @@ Allowed options:
         Removes the specified host and all associated configurations.
     - restart {service}:
         Restart the specified or all Docker Compose service(s).
-    - restart-supervisor:
-        Restart the supervisor service
+    - supervisor-restart:
+        Restart the supervisor service.
     - rootssl:
-        Generates a root SSL certificate and imports it to Chrome. Then rebuilds the php service.
+        Generates a root SSL certificate and restarts the franken_php service.
     - redis-monitor:
         Access the redis service's monitor using Docker Compose.
     - redis-flush:
