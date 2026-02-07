@@ -114,7 +114,7 @@ This will:
 | `web restart [service]`            | Restart all or specified Docker services |
 | `web build [service] [--no-cache]` | Build all or specified Docker services   |
 | `web ps [service]`                 | Show Docker container status             |
-| `web log <service>`                | View logs for a Docker service           |
+| `web log <service>`               | View logs for a Docker service           |
 
 ### Host Management
 
@@ -197,14 +197,14 @@ This will:
 
 ## Docker Services
 
-| Service         | Description                                | Ports                           |
-| --------------- | ------------------------------------------ | ------------------------------- |
-| **franken_php** | PHP 8.3 + Caddy web server with Xdebug     | 80, 443, 443/udp (HTTP/3), 8080 |
-| **mariadb**     | MariaDB database server (MySQL compatible) | 3306                            |
-| **redis**       | Redis caching server                       | 6379                            |
-| **phpmyadmin**  | Database management GUI                    | via Caddy                       |
+| Service         | Description                                | Ports                            |
+| --------------- | ------------------------------------------ | -------------------------------- |
+| **franken_php** | PHP 8.3 + Caddy web server with Xdebug    | 80, 443, 443/udp (HTTP/3), 8080 |
+| **mariadb**     | MariaDB database server (MySQL compatible) | 3306                             |
+| **redis**       | Redis caching server                       | 6379                             |
+| **phpmyadmin**  | Database management GUI                    | via Caddy                        |
 | **mailhog**     | Email testing service                      | 1025 (SMTP), 8025 (Web UI)      |
-| **typesense**   | Search engine                              | 8108                            |
+| **typesense**   | Search engine                              | 8108                             |
 
 ---
 
@@ -242,8 +242,8 @@ Key variables in `.env`:
 | `APP_USER`            | Container user                | `www`            |
 | `UID` / `GID`         | User/Group ID for permissions | `1000`           |
 | `MYSQL_ROOT_PASSWORD` | Database root password        | `secret`         |
-| `XDEBUG_MODE`         | Xdebug behavior               | `off`            |
-| `XDEBUG_IDEKEY`       | IDE key for debugging         | `XDEBUG_ECLIPSE` |
+| `XDEBUG_MODE`        | Xdebug behavior               | `off`            |
+| `XDEBUG_IDEKEY`      | IDE key for debugging         | `XDEBUG_ECLIPSE` |
 | `NODE_VERSION`        | Node.js version for container | `22.16.0`        |
 
 ---

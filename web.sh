@@ -1,214 +1,153 @@
 #!/bin/bash
 
 set -o errexit
+set -o pipefail
 
-CMD="${1:-false}"
-HOST="${2:-false}"
-DEST="${3:-false}"
-
-WEB_ROOT=${WEB_ROOT:-$HOME/www}
-USERNAME=${USERNAME:-$(whoami)}
-SCRIPT_DIR=${SCRIPT_DIR:-$HOME/www/dev}
-BACKEND_DIR=${BACKEND_DIR:-$SCRIPT_DIR/franken_php}
-BACKEND_CONFIG_DIR=$BACKEND_DIR/config
-BACKEND_SITES_DIR=$BACKEND_CONFIG_DIR/sites
-DC="docker compose -f $SCRIPT_DIR/docker-compose.yml"
-
+WEB_ROOT="${WEB_ROOT:-$HOME/www}"
+USERNAME="${USERNAME:-$(whoami)}"
+SCRIPT_DIR="${SCRIPT_DIR:-$HOME/www/dev}"
+BACKEND_DIR="${BACKEND_DIR:-$SCRIPT_DIR/franken_php}"
+BACKEND_CONFIG_DIR="$BACKEND_DIR/config"
+BACKEND_SITES_DIR="$BACKEND_CONFIG_DIR/sites"
+HOSTS_JSON="${HOSTS_JSON:-$SCRIPT_DIR/web-hosts.json}"
 CERTS_DIR="$BACKEND_CONFIG_DIR/ssl"
 ROOT_KEY="$CERTS_DIR/rootCA.key"
 ROOT_CRT="$CERTS_DIR/rootCA.crt"
-HOSTS_MODULE_PATH_CACHED=""
-if command -v pwsh.exe >/dev/null 2>&1; then
-    POWERSHELL_EXE="pwsh.exe"
-else
-    POWERSHELL_EXE="powershell.exe"
-fi
+DC="docker compose -f $SCRIPT_DIR/docker-compose.yml"
+KNOWN_SLDS="co.uk gov.uk com.br co.jp"
 
-function add_host_config {
-    host_type="${1:-wordpress}"
-    parts=($(echo "$HOST" | tr '.' ' '))
-    n=${#parts[@]}
+_HOSTS_MODULE_PATH_CACHED=""
 
-    if ((n <= 1)); then
-        main_domain="$HOST"
-        sub_domain=""
-        root_domain="$HOST"
-    else
-        tld_count=1
-        if ((n >= 2)) && ((${#parts[n - 2]} <= 3)); then
-            tld_count=2
-        fi
-        tld="${parts[n - tld_count]}"
-        for ((i = n - tld_count + 1; i < n; i++)); do
-            tld="$tld.${parts[i]}"
-        done
-        main_idx=$((n - 1 - tld_count))
-        main_domain="${parts[main_idx]}"
-        sub_domain=""
-        if ((main_idx > 0)); then
-            sub_domain="${parts[0]}"
-            for ((i = 1; i < main_idx; i++)); do
-                sub_domain="$sub_domain.${parts[i]}"
-            done
-        fi
-        root_domain="$main_domain.$tld"
-    fi
-
-    if [[ -z "$sub_domain" || "$sub_domain" == "$main_domain" ]]; then
-        db_name="$main_domain"
-    else
-        db_name="${main_domain}_$(echo "$sub_domain" | tr '.' '_')"
-    fi
-
-    if [[ "$host_type" == "wordpress" || "$host_type" == "wp" ]]; then
-        db_name="${db_name}_wp"
-    else
-        db_name="${db_name}_db"
-    fi
-    db_name="$(echo "$db_name" | tr '.' '_')"
-    db_name="$(sanitize_db_identifier "$db_name")"
-
-    json_file="$WEB_ROOT/dev/web-hosts.json"
-
-    existing_host=$(jq -r --arg hn "$HOST" '.hosts[] | select(.name == $hn)' $json_file)
-    if [ -n "$existing_host" ]; then
-        echo "Host $HOST already exists in the JSON file." >&2
-        return 1
-    fi
-
-    new_host=$(jq -n \
-        --arg hn "$HOST" \
-        --arg ht "$host_type" \
-        --arg db "$db_name" \
-        '{name: $hn, type: $ht, db: $db}')
-
-    jq ".hosts += [$new_host]" $json_file >"temp.json" && mv "temp.json" $json_file
+die() {
+    printf '\033[31mError: %s\033[0m\n' "$1" >&2
+    exit 1
 }
 
-function build_webconf {
-    config_path="$SCRIPT_DIR/web-hosts.json"
-    yaml_file="$SCRIPT_DIR/templates.yml"
-    find "$BACKEND_CONFIG_DIR/sites" -type f ! -name 'phpmyadmin.test.conf' ! -name '.gitkeep' -delete
-
-    if [ ! -f "$config_path" ]; then
-        echo "No config file found, creating default one"
-        echo '{
-            "output": "'$BACKEND_SITES_DIR'",
-            "template": "'$BACKEND_CONFIG_DIR/template.conf'",
-            "WEB_ROOT": "'$WEB_ROOT'",
-            "hosts": []
-        }' >"$config_path"
-        exit 1
-    fi
-
-    if ! jq -e '.hosts[] | select(.name == "phpmyadmin.test")' "$config_path"; then
-        add_host_redirect "phpmyadmin.test"
-        add_host_ssl "phpmyadmin.test"
-    fi
-
-    echo "services:" >"$yaml_file"
-    echo "  franken_php:" >>"$yaml_file"
-    echo "    networks:" >>"$yaml_file"
-    echo "      dev_network:" >>"$yaml_file"
-    echo "        aliases:" >>"$yaml_file"
-
-    for row in $(jq -c '.hosts[]' "$config_path"); do
-        host_name=$(echo "$row" | jq -r '.name')
-        echo "          - $host_name" >>"$yaml_file"
-    done
-
-    echo "" >"$SCRIPT_DIR/crontab"
-
-    mapfile -t host_entries < <(jq -c '.hosts[]' "$config_path")
-    for row in "${host_entries[@]}"; do
-        {
-            host_name=$(echo "$row" | jq -r '.name')
-            type=$(echo "$row" | jq -r '.type')
-            db=$(echo "$row" | jq -r '.db')
-            host_name_root=$(hostname_root "$host_name")
-
-            echo "🔧 Processing host: $host_name"
-
-            serve_root="/var/www/$host_name"
-            site_conf="$BACKEND_SITES_DIR/$host_name.conf"
-            debugout="$HOME/www/$host_name/.vscode"
-
-            if [[ "$type" == "wp" || "$type" == "wordpress" ]]; then
-                echo "* * * * * cd $serve_root && php $serve_root/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" >>"$SCRIPT_DIR/crontab"
-            fi
-
-            add_host_redirect "$host_name"
-            add_host_ssl "$host_name"
-
-            [[ "$type" == "laravel" ]] && serve_root="$serve_root/public"
-
-            mkdir -p "$debugout"
-            sed -e "s|\${HOSTNAME}|$host_name|g;" "$SCRIPT_DIR/launch.json" >"$debugout/launch.json"
-            sed -e "s|\${APP_URL}|${host_name}|g;" -e "s|\${SERVE_ROOT}|${serve_root}|g;" \
-                "$BACKEND_CONFIG_DIR/template.conf" >"$site_conf"
-
-            DB_EXISTS=$(docker exec dev-mariadb-1 mariadb -u root -psecret -Nse \
-                "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='${db}'")
-
-            if [ -z "$DB_EXISTS" ]; then
-                echo "📦 Creating missing DB: ${db}"
-                db_cmd create $host_name
-            fi
-        } || {
-            echo "❌ Error processing host: $host_name. Skipping..."
-            continue
-        }
-    done
-
-    echo "✅ Finished Building Web Configs. Restarting Caddy..."
-    $DC restart franken_php
+warn() {
+    printf '\033[0;33m%s\033[0m\n' "$1" >&2
 }
 
-function check_host {
-    if [ -z "$HOST" ]; then
-        echo "No HOST parameter specified"
-        exit 1
-    fi
+info() {
+    printf '\033[0;32m%s\033[0m\n' "$1"
 }
 
-function confirm_action {
-    read -p "$1 [Y/N]" -n 1 -r REPLY
-    echo ""
-    case $REPLY in
-    [Yy]*)
-        return 0
-        ;;
-    [Nn]*)
-        echo "Aborting..."
-        exit 1
-        ;;
-    *) echo "Please enter y or n." ;;
-    esac
+log() {
+    printf '%s\n' "$1"
 }
 
-function check_docker {
-    if ! command -v docker &>/dev/null; then
-        echo "Error: Docker is not installed or not found in WSL. Please install Docker Desktop and enable WSL integration."
-        exit 1
-    fi
-
-    if ! docker info &>/dev/null; then
-        echo "Error: Docker daemon is not running. Start Docker Desktop and ensure WSL integration is enabled."
-        exit 1
-    fi
+require_cmd() {
+    local cmd="$1"
+    command -v "$cmd" &>/dev/null || die "$cmd is not installed."
 }
 
-function check_jq {
+require_host() {
+    [[ -n "${1:-}" ]] || die "No hostname specified. Usage: web $2 <hostname>"
+}
+
+require_docker() {
+    require_cmd docker
+    docker info &>/dev/null || die "Docker daemon is not running. Start Docker Desktop and ensure WSL integration is enabled."
+}
+
+ensure_jq() {
     if ! command -v jq &>/dev/null; then
-        echo "jq is not installed. Installing jq..."
+        log "jq is not installed. Installing jq..."
         sudo apt update && sudo apt install -y jq
     fi
 }
 
-function hostname_root {
-    local domain="$1"
+confirm() {
+    local reply
+    while true; do
+        read -rp "$1 [y/n] " -n 1 reply
+        echo
+        case "$reply" in
+            [Yy]) return 0 ;;
+            [Nn]) log "Aborting."; return 1 ;;
+            *)    warn "Please enter y or n." ;;
+        esac
+    done
+}
 
-    IFS='.' read -r -a parts <<<"$domain"
+is_wsl() {
+    grep -q WSL /proc/version 2>/dev/null
+}
+
+powershell_exe() {
+    if command -v pwsh.exe >/dev/null 2>&1; then
+        echo "pwsh.exe"
+    else
+        echo "powershell.exe"
+    fi
+}
+
+hosts_json_query() {
+    jq "$@" "$HOSTS_JSON"
+}
+
+hosts_json_get_host() {
+    local name="$1"
+    hosts_json_query -r --arg hn "$name" '.hosts[] | select(.name == $hn)'
+}
+
+hosts_json_get_db() {
+    local name="$1"
+    hosts_json_query -r --arg hn "$name" '.hosts[] | select(.name == $hn) | .db'
+}
+
+hosts_json_add() {
+    local host_name="$1" host_type="$2" db_name="$3"
+    local existing
+    existing=$(hosts_json_get_host "$host_name")
+    if [[ -n "$existing" ]]; then
+        warn "Host $host_name already exists in $HOSTS_JSON."
+        return 1
+    fi
+
+    local new_host
+    new_host=$(jq -n \
+        --arg hn "$host_name" \
+        --arg ht "$host_type" \
+        --arg db "$db_name" \
+        '{name: $hn, type: $ht, db: $db}')
+
+    local tmp
+    tmp=$(mktemp)
+    jq ".hosts += [$new_host]" "$HOSTS_JSON" > "$tmp" && mv "$tmp" "$HOSTS_JSON"
+}
+
+hosts_json_remove() {
+    local host_name="$1"
+    local existing
+    existing=$(hosts_json_get_host "$host_name")
+    [[ -z "$existing" ]] && return 0
+
+    local tmp
+    tmp=$(mktemp)
+    jq --arg hn "$host_name" 'del(.hosts[] | select(.name == $hn))' "$HOSTS_JSON" > "$tmp" \
+        && mv "$tmp" "$HOSTS_JSON"
+}
+
+hosts_json_ensure_defaults() {
+    if [[ ! -f "$HOSTS_JSON" ]]; then
+        log "No config file found, creating default one"
+        cat > "$HOSTS_JSON" <<-ENDJSON
+		{
+		    "output": "$BACKEND_SITES_DIR",
+		    "template": "$BACKEND_CONFIG_DIR/template.conf",
+		    "WEB_ROOT": "$WEB_ROOT",
+		    "hosts": []
+		}
+		ENDJSON
+        return 1
+    fi
+    return 0
+}
+
+hostname_root() {
+    local domain="$1"
+    local -a parts
+    IFS='.' read -r -a parts <<< "$domain"
     local n=${#parts[@]}
 
     if ((n <= 1)); then
@@ -216,11 +155,10 @@ function hostname_root {
         return
     fi
 
-    local known_sld=("co.uk" "gov.uk" "com.br" "co.jp")
     local tld_count=1
-    local last_two="${parts[n - 2]}.${parts[n - 1]}"
-
-    for sld in "${known_sld[@]}"; do
+    local last_two="${parts[n-2]}.${parts[n-1]}"
+    local sld
+    for sld in $KNOWN_SLDS; do
         if [[ "$last_two" == "$sld" ]]; then
             tld_count=2
             break
@@ -228,161 +166,222 @@ function hostname_root {
     done
 
     local main_idx=$((n - tld_count - 1))
-    if ((main_idx < 0)); then
-        main_idx=0
-    fi
-
+    ((main_idx < 0)) && main_idx=0
     echo "${parts[main_idx]}"
 }
 
-function sanitize_db_identifier {
+sanitize_db_identifier() {
     local raw="$1"
     local cleaned
-
     cleaned=$(printf '%s' "$raw" | LC_ALL=C tr -c 'A-Za-z0-9_' '_')
-    cleaned=${cleaned#_}
-
-    if [[ -z "$cleaned" ]]; then
-        cleaned="db"
-    fi
-
-    if [[ "$cleaned" =~ ^[0-9] ]]; then
-        cleaned="db_${cleaned}"
-    fi
-
+    while [[ "$cleaned" == _* ]]; do cleaned="${cleaned#_}"; done
+    [[ -z "$cleaned" ]] && cleaned="db"
+    [[ "$cleaned" =~ ^[0-9] ]] && cleaned="db_${cleaned}"
     printf '%s\n' "$cleaned"
 }
 
-host_root_ssl_generate() {
-    local FILENAME="${1:-rootCA}"
-    local PASSPHRASE="${2:-default}"
-    local VALIDITY_DAYS=29200  # 80 years
-    local SUBJECT="/C=GB/ST=London/L=London/O=Lyntouch/OU=IT Department/CN=Lyntouch Self-Signed RootCA/emailAddress=info@lyntouch.com"
+make_db_name() {
+    local host="$1"
+    local host_type="$2"
+    local -a parts
+    IFS='.' read -r -a parts <<< "$host"
+    local n=${#parts[@]}
+    local main_domain sub_domain tld_count=1
 
-    # Calculate expiry date
-    local EXPIRY_DATE
-    EXPIRY_DATE=$(date -d "+$VALIDITY_DAYS days" "+%Y-%m-%d") || {
-        echo "Error: Failed to calculate expiry date." >&2
-        return 1
-    }
-
-    # Ensure CERTS_DIR is defined
-    if [[ -z "$CERTS_DIR" ]]; then
-        echo "Error: CERTS_DIR environment variable is not set." >&2
-        return 1
+    if ((n <= 1)); then
+        main_domain="$host"
+        sub_domain=""
+    else
+        if ((n >= 2)) && ((${#parts[n-2]} <= 3)); then
+            tld_count=2
+        fi
+        local main_idx=$((n - 1 - tld_count))
+        ((main_idx < 0)) && main_idx=0
+        main_domain="${parts[main_idx]}"
+        sub_domain=""
+        if ((main_idx > 0)); then
+            sub_domain="${parts[0]}"
+            local i
+            for ((i = 1; i < main_idx; i++)); do
+                sub_domain="${sub_domain}.${parts[i]}"
+            done
+        fi
     fi
+
+    local db_name
+    if [[ -z "$sub_domain" || "$sub_domain" == "$main_domain" ]]; then
+        db_name="$main_domain"
+    else
+        db_name="${main_domain}_$(echo "$sub_domain" | tr '.' '_')"
+    fi
+
+    case "$host_type" in
+        wordpress|wp) db_name="${db_name}_wp" ;;
+        *)            db_name="${db_name}_db" ;;
+    esac
+
+    db_name=$(echo "$db_name" | tr '.' '_')
+    sanitize_db_identifier "$db_name"
+}
+
+db_create() {
+    local host_name="$1"
+    local db_name
+    db_name=$(hosts_json_get_db "$host_name")
+    [[ -z "$db_name" ]] && die "No database configured for host $host_name"
+
+    log "Creating database and user: $db_name"
+    $DC exec mariadb mariadb -uroot -psecret -e "CREATE USER IF NOT EXISTS '${db_name}'@'%' IDENTIFIED BY 'secret';"
+    $DC exec mariadb mariadb -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`;"
+    $DC exec mariadb mariadb -uroot -psecret -e "GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${db_name}'@'%';"
+}
+
+db_remove() {
+    local host_name="$1"
+    local db_name
+    db_name=$(hosts_json_get_db "$host_name")
+    [[ -z "$db_name" ]] && return 0
+
+    log "Removing database and user: $db_name"
+    $DC exec mariadb mariadb -uroot -psecret -e "DROP DATABASE IF EXISTS \`${db_name}\`;"
+    $DC exec mariadb mariadb -uroot -psecret -e "DROP USER IF EXISTS '${db_name}'@'%';"
+}
+
+db_exists() {
+    local db_name="$1"
+    local result
+    result=$(docker exec dev-mariadb-1 mariadb -u root -psecret -Nse \
+        "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='${db_name}'")
+    [[ -n "$result" ]]
+}
+
+ssl_generate_root() {
+    local filename="${1:-rootCA}"
+    local passphrase="${2:-default}"
+    local validity_days=29200
+    local subject="/C=GB/ST=London/L=London/O=Lyntouch/OU=IT Department/CN=Lyntouch Self-Signed RootCA/emailAddress=info@lyntouch.com"
+
+    local expiry_date
+    expiry_date=$(date -d "+${validity_days} days" "+%Y-%m-%d") \
+        || die "Failed to calculate expiry date."
 
     mkdir -p "$CERTS_DIR"
 
-    local KEY_PATH="$CERTS_DIR/$FILENAME.key"
-    local CRT_PATH="$CERTS_DIR/$FILENAME.crt"
+    local key_path="$CERTS_DIR/${filename}.key"
+    local crt_path="$CERTS_DIR/${filename}.crt"
 
-    echo "Creating Root Certificate Authority:"
-    echo "  Filename base:    $FILENAME"
-    echo "  Key:              $KEY_PATH"
-    echo "  Cert:             $CRT_PATH"
-    echo "  Expires on:       $EXPIRY_DATE"
-    echo "  Output directory: $CERTS_DIR"
+    log "Creating Root Certificate Authority:"
+    log "  Key:         $key_path"
+    log "  Cert:        $crt_path"
+    log "  Expires on:  $expiry_date"
 
-    # Generate private key
-    openssl genrsa -des3 -passout "pass:$PASSPHRASE" -out "$KEY_PATH" 4096 || return 1
+    openssl genrsa -des3 -passout "pass:$passphrase" -out "$key_path" 4096 || return 1
+    openssl req -x509 -new -nodes -passin "pass:$passphrase" \
+        -key "$key_path" -sha256 -days "$validity_days" \
+        -subj "$subject" \
+        -out "$crt_path" || return 1
 
-    # Generate self-signed root certificate
-    openssl req -x509 -new -nodes -passin "pass:$PASSPHRASE" \
-        -key "$KEY_PATH" -sha256 -days "$VALIDITY_DAYS" \
-        -subj "$SUBJECT" \
-        -out "$CRT_PATH" || return 1
-
-    echo "Root CA created successfully"
+    info "Root CA created successfully"
 }
 
-function add_host_ssl() {
-    SSL_HOST=$1
-    CRT_PATH="$CERTS_DIR/$SSL_HOST.crt"
-    KEY_PATH="$CERTS_DIR/$SSL_HOST.key"
-    CSR_PATH="$CERTS_DIR/$SSL_HOST.csr"
-    EXT_FILE=$(add_host_ssl_extfile "$SSL_HOST")
+ssl_generate_host() {
+    local ssl_host="$1"
+    local crt_path="$CERTS_DIR/${ssl_host}.crt"
+    local key_path="$CERTS_DIR/${ssl_host}.key"
+    local csr_path="$CERTS_DIR/${ssl_host}.csr"
+    local subject="/C=GB/ST=London/L=London/O=${ssl_host}/OU=IT Department/CN=Lyntouch Self-Signed Host Certificate/emailAddress=info@lyntouch.com"
 
-    if [ ! -f "$KEY_PATH" ]; then
-        print_color green "Generating SSL key for $SSL_HOST"
+    if [[ ! -f "$key_path" ]]; then
+        info "Generating SSL key for $ssl_host"
         openssl req -new -sha256 -nodes \
-            -out "$CSR_PATH" -newkey rsa:2048 \
-            -subj "/C=GB/ST=London/L=London/O=$SSL_HOST/OU=IT Department/CN=Lyntouch Self-Signed Host Certificate/emailAddress=info@lyntouch.com" \
-            -keyout "$KEY_PATH"
+            -out "$csr_path" -newkey rsa:2048 \
+            -subj "$subject" \
+            -keyout "$key_path"
     fi
 
-    if [ ! -f "$CRT_PATH" ]; then
-        print_color green "Generating SSL certificate for $SSL_HOST"
+    if [[ ! -f "$crt_path" ]]; then
+        info "Generating SSL certificate for $ssl_host"
         openssl x509 -req -passin pass:default \
-            -in "$CSR_PATH" \
+            -in "$csr_path" \
             -CA "$ROOT_CRT" -CAkey "$ROOT_KEY" \
-            -CAcreateserial -out "$CRT_PATH" \
-            -days 500 -sha256 -extfile <(printf "$EXT_FILE")
+            -CAcreateserial -out "$crt_path" \
+            -days 500 -sha256 \
+            -extfile <(ssl_extfile "$ssl_host")
+    fi
+}
+
+ssl_extfile() {
+    local host_name="$1"
+    cat <<-EOF
+	authorityKeyIdentifier=keyid,issuer
+	basicConstraints=CA:FALSE
+	keyUsage=digitalSignature,nonRepudiation,keyEncipherment,dataEncipherment
+	subjectAltName = @alt_names
+	[alt_names]
+	DNS.1 = $host_name
+	IP.1 = 127.0.0.1
+	EOF
+}
+
+ssl_import_root_to_chrome() {
+    is_wsl && die "Chrome root CA import is not supported on WSL."
+
+    local cert_file="${1:-$ROOT_CRT}"
+    local cert_nickname="${2:-Root CA}"
+    [[ -f "$cert_file" ]] || die "Certificate file not found: $cert_file"
+
+    openssl x509 -outform der -in "$cert_file" -out "${cert_file}.der"
+
+    local cert_dir="$HOME/.pki/nssdb"
+    if [[ ! -d "$cert_dir" ]]; then
+        mkdir -p "$cert_dir"
+        certutil -N -d "$cert_dir"
     fi
 
-    # rm -f "$CSR_PATH"
+    certutil -d "sql:$cert_dir" -A -t "C,," -n "$cert_nickname" -i "${cert_file}.der"
+    info "Certificate imported to Chrome with nickname: $cert_nickname"
 }
 
-function add_host_ssl_extfile() {
-    host_name=$1
-    cat <<EOF
-		authorityKeyIdentifier=keyid,issuer\n
-		basicConstraints=CA:FALSE\n
-		keyUsage=digitalSignature,nonRepudiation,keyEncipherment,dataEncipherment\n
-		subjectAltName = @alt_names\n
-		[alt_names]\n
-		DNS.1 = $host_name
-        IP.1 = 127.0.0.1
-EOF
-}
-
-function resolve_hosts_module_path() {
-    local search_paths
-    local match
-    local module_path=""
-
-    if [ -n "$HOSTS_MODULE_PATH_CACHED" ]; then
-        echo "$HOSTS_MODULE_PATH_CACHED"
+_resolve_hosts_module_path() {
+    if [[ -n "$_HOSTS_MODULE_PATH_CACHED" ]]; then
+        echo "$_HOSTS_MODULE_PATH_CACHED"
         return 0
     fi
 
-    search_paths=(
+    local search_paths=(
         "/mnt/c/Users/*/Documents/PowerShell/Modules/Hosts/*/Hosts.psd1"
         "/mnt/c/Users/*/Documents/WindowsPowerShell/Modules/Hosts/*/Hosts.psd1"
         "/mnt/c/Users/*/Documents/PowerShell/Modules/Hosts/*/Hosts.psm1"
         "/mnt/c/Users/*/Documents/WindowsPowerShell/Modules/Hosts/*/Hosts.psm1"
     )
 
+    local match
     shopt -s nullglob
     for candidate in "${search_paths[@]}"; do
         for match in $candidate; do
-            module_path="$match"
+            _HOSTS_MODULE_PATH_CACHED="$match"
             break 2
         done
     done
     shopt -u nullglob
 
-    HOSTS_MODULE_PATH_CACHED="$module_path"
-    echo "$HOSTS_MODULE_PATH_CACHED"
+    echo "$_HOSTS_MODULE_PATH_CACHED"
 }
 
-function run_host_mapping_cmdlet() {
+_run_host_mapping_cmdlet() {
     local cmdlet="$1"
     local hostname="$2"
-    local module_path
-    local module_path_win
-    local import_cmd
-    local ps_command
+    local module_path import_cmd ps_command
 
-    module_path=$(resolve_hosts_module_path)
-    if [ -n "$module_path" ]; then
+    module_path=$(_resolve_hosts_module_path)
+    if [[ -n "$module_path" ]]; then
+        local module_path_win
         module_path_win=$(wslpath -w "$module_path")
         import_cmd="Import-Module '$module_path_win' -ErrorAction Stop"
     else
         import_cmd="Import-Module Hosts -ErrorAction Stop"
     fi
 
-    # Build a command that checks for admin rights and elevates if needed, with -Wait to block until done
     ps_command="& {
         $import_cmd
         \$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -393,495 +392,403 @@ function run_host_mapping_cmdlet() {
         }
     }"
 
-    $POWERSHELL_EXE -NoProfile -Command "$ps_command"
+    "$(powershell_exe)" -NoProfile -Command "$ps_command"
 }
 
-function add_host_redirect() {
-    HOST="$1"
+redirect_add() {
+    local host="$1"
     if is_wsl; then
-        WIN_HOSTS_FILE="/mnt/c/Windows/System32/drivers/etc/hosts"
-        if grep -qP "^\s*127\.0\.0\.1.*$HOST(?:\s+|$)" "$WIN_HOSTS_FILE"; then
+        local win_hosts="/mnt/c/Windows/System32/drivers/etc/hosts"
+        if grep -qP "^\s*127\.0\.0\.1.*${host}(?:\s+|$)" "$win_hosts" 2>/dev/null; then
             return 0
         fi
-        echo "Adding host redirection for \"$HOST\""
-        if ! run_host_mapping_cmdlet "New-HostnameMapping" "$HOST"; then
-            echo "Failed to add host mapping for $HOST. Ensure the Hosts module is available."
-            return 1
-        fi
+        log "Adding host redirection for \"$host\""
+        _run_host_mapping_cmdlet "New-HostnameMapping" "$host" \
+            || { warn "Failed to add host mapping for $host."; return 1; }
     else
-        exists=$(getent hosts "$HOST")
-        if [ -z "$exists" ]; then
-            echo "Adding host redirection for \"$HOST\""
-            echo "127.0.0.1 $HOST" | sudo tee -a /etc/hosts >/dev/null
+        if ! getent hosts "$host" &>/dev/null; then
+            log "Adding host redirection for \"$host\""
+            echo "127.0.0.1 $host" | sudo tee -a /etc/hosts >/dev/null
         fi
     fi
 }
 
-function host_redirect_del {
-    HOST="$1"
-    echo "Removing host redirection for \"$HOST\""
+redirect_remove() {
+    local host="$1"
+    log "Removing host redirection for \"$host\""
     if is_wsl; then
-        if ! run_host_mapping_cmdlet "Remove-HostnameMapping" "$HOST"; then
-            echo "Failed to remove host mapping for $HOST. Ensure the Hosts module is available."
-            return 1
-        fi
+        _run_host_mapping_cmdlet "Remove-HostnameMapping" "$host" \
+            || { warn "Failed to remove host mapping for $host."; return 1; }
     else
-        if grep -q "$HOST" /etc/hosts; then
-            sudo sed -i.bak "/$HOST/d" /etc/hosts
+        if grep -q "$host" /etc/hosts 2>/dev/null; then
+            sudo sed -i.bak "/$host/d" /etc/hosts
         fi
     fi
 }
 
-function is_wsl() {
-    grep -q WSL /proc/version
-}
+build_webconf() {
+    hosts_json_ensure_defaults || return 1
 
-function new_host {
-    check_docker
-    check_jq
+    local yaml_file="$SCRIPT_DIR/templates.yml"
 
-    if [ -z "$HOST" ]; then
-        echo "Usage: web new-host <hostname> [-t wp|laravel]"
-        return 1
+    find "$BACKEND_SITES_DIR" -type f ! -name 'phpmyadmin.test.conf' ! -name '.gitkeep' -delete
+
+    if ! jq -e '.hosts[] | select(.name == "phpmyadmin.test")' "$HOSTS_JSON" >/dev/null 2>&1; then
+        redirect_add "phpmyadmin.test"
+        ssl_generate_host "phpmyadmin.test"
     fi
 
-    case "$TYPE" in
-    wp)
-        new_wp "$HOST"
-        ;;
-    laravel)
-        generate_supervisor_conf $HOST
-        new_laravel "$HOST"
-        ;;
-    *)
-        echo "Invalid type. Use wp for WordPress or laravel for Laravel."
-        return 1
-        ;;
-    esac
+    {
+        echo "services:"
+        echo "  franken_php:"
+        echo "    networks:"
+        echo "      dev_network:"
+        echo "        aliases:"
+        hosts_json_query -r '.hosts[].name' | while read -r name; do
+            echo "          - $name"
+        done
+    } > "$yaml_file"
 
-    add_host_config "$TYPE" "$HOST"
-    add_host_redirect "$HOST"
+    : > "$SCRIPT_DIR/crontab"
 
-    build_webconf
+    local row host_name host_type db serve_root site_conf debugout
+    mapfile -t host_entries < <(hosts_json_query -c '.hosts[]')
+
+    for row in "${host_entries[@]}"; do
+        host_name=$(jq -r '.name' <<< "$row")
+        host_type=$(jq -r '.type' <<< "$row")
+        db=$(jq -r '.db' <<< "$row")
+
+        log "Processing host: $host_name"
+
+        serve_root="/var/www/$host_name"
+        site_conf="$BACKEND_SITES_DIR/${host_name}.conf"
+        debugout="$WEB_ROOT/$host_name/.vscode"
+
+        if [[ "$host_type" == "wp" || "$host_type" == "wordpress" ]]; then
+            echo "* * * * * cd $serve_root && php $serve_root/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" \
+                >> "$SCRIPT_DIR/crontab"
+        fi
+
+        redirect_add "$host_name"
+        ssl_generate_host "$host_name"
+
+        [[ "$host_type" == "laravel" ]] && serve_root="$serve_root/public"
+
+        mkdir -p "$debugout"
+        sed -e "s|\${HOSTNAME}|$host_name|g" "$SCRIPT_DIR/launch.json" > "$debugout/launch.json"
+
+        sed -e "s|\${APP_URL}|${host_name}|g" \
+            -e "s|\${SERVE_ROOT}|${serve_root}|g" \
+            "$BACKEND_CONFIG_DIR/template.conf" > "$site_conf"
+
+        if ! db_exists "$db"; then
+            log "Creating missing DB: $db"
+            db_create "$host_name"
+        fi
+    done
+
+    info "Finished building web configs. Restarting Caddy..."
+    $DC restart franken_php
 }
 
-function new_wp {
-    program_installed curl || return 1
-    program_installed tar || return 1
-    echo "Setting up WordPress..."
+supervisor_generate_conf() {
+    local host="$1"
+    require_host "$host" "supervisor-conf"
 
-    if [ ! -f "$WEB_ROOT/wordpress.tar.gz" ]; then
-        curl https://en-gb.wordpress.org/latest-en_GB.tar.gz -o "$WEB_ROOT/wordpress.tar.gz"
-    fi
-
-    project_path="$WEB_ROOT/$HOST"
-    if [ ! -d "$project_path" ]; then
-        mkdir -p "$project_path"
-        mkdir -p ./tmp_dir
-        print_color green "Extracting Wordpress"
-        tar -xzf "$WEB_ROOT/wordpress.tar.gz" -C ./tmp_dir
-        mv ./tmp_dir/wordpress/* "$project_path"
-        rm -rf ./tmp_dir
-    else
-        print_color yellow "Wordpress $project_path already exists, remove before continue"
-        return 1
-    fi
-
-    # Setup Wordpress Config
-    host_name=$(hostname_root $HOST)
-    db_name=$(get_db_name $host_name wp)
-    username="root"
-    password="secret"
-    sample_conf=$project_path/wp-config-sample.php
-    dest_conf=$project_path/wp-config.php
-
-    [ ! -f $dest_conf ] && mv $sample_conf $dest_conf
-
-    sed -i "s/username_here/$username/g;s/database_name_here/$db_name/g;s/password_here/$password/g;s/localhost/mariadb/g;" $dest_conf
-
-}
-generate_supervisor_conf() {
-    host="$1"
-    host_name=$(echo "$1" | tr '.' '_')
-    output_dir="${2:-/etc/supervisor/conf.d}"
-    log_dir="/tmp/supervisor-logs/$host"
-    program_name="$host_name"
+    local host_underscored="${host//./_}"
+    local output_dir="${2:-/etc/supervisor/conf.d}"
+    local log_dir="/tmp/supervisor-logs/$host"
 
     sudo mkdir -p "$log_dir"
+    sudo tee "$output_dir/${host_underscored}.conf" >/dev/null <<-EOF
+	[program:$host_underscored]
+	process_name=%(program_name)s_%(process_num)02d
+	command=php $WEB_ROOT/$host/artisan horizon
+	autostart=true
+	autorestart=true
+	stopasgroup=true
+	killasgroup=true
+	user=$USERNAME
+	numprocs=1
+	redirect_stderr=true
+	stdout_logfile=$log_dir/worker.log
+	stopwaitsecs=3600
+	EOF
 
-    sudo tee "$output_dir/$program_name.conf" >/dev/null <<EOF
-[program:$program_name]
-process_name=%(program_name)s_%(process_num)02d
-command=php $WEB_ROOT/$host/artisan horizon
-autostart=true
-autorestart=true
-stopasgroup=true
-killasgroup=true
-user=$USERNAME
-numprocs=1
-redirect_stderr=true
-stdout_logfile=$log_dir/worker.log
-stopwaitsecs=3600
-EOF
-
-    echo "✅ Supervisor config generated at $output_dir/$program_name.conf"
+    info "Supervisor config generated at $output_dir/${host_underscored}.conf"
 }
 
-function new_laravel {
-    echo "Setting up Laravel for $host..."
-    host_name=$(hostname_root $host)
-
-    project_path="$WEB_ROOT/$HOST"
-    echo $project_path
-    if [ ! -d "$project_path" ]; then
-        mkdir -p "$project_path"
-        composer create-project --prefer-dist laravel/laravel "$project_path"
-        # Additional Laravel-specific setup steps can be added here
-        # For example:
-        # cp "$project_path/.env.example" "$project_path/.env"
-        # php "$project_path/artisan" key:generate
-        # php "$project_path/artisan" storage:link
-    else
-        print_color yellow "Laravel project $host_name already exists"
-        return 1
-    fi
-}
-
-function parse_args() {
-    TYPE="wp"
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-        -t)
-            TYPE=$2
-            shift 2
-            ;;
-        *)
-            HOST=$1
-            shift
-            ;;
-        esac
-    done
-
-    if [ -z "$HOST" ]; then
-        echo "No HOST parameter specified"
-        exit 1
-    fi
-}
-
-function program_installed {
-    if ! [ -x "$(command -v $1)" ]; then
-        echo "Error: $1 is not installed." >&2
-        return 1
-    fi
-}
-
-function print_color() {
-    declare -A colors=(
-        ['red']='\033[31m'
-        ['green']='\033[0;32m'
-        ['yellow']='\033[0;33m'
-    )
-    echo -e "${colors[$1]}$2\033[0m"
-}
-
-function host_remove() {
-    db_name=$(get_web_host_db $HOST)
-    if [ ! -z $db_name ]; then
-        db_cmd remove $HOST
-    fi
-
-    echo "Removing $WEB_ROOT/$HOST"
-    rm -rf "$WEB_ROOT/$HOST"
-
-    host_redirect_del "$HOST"
-
-    host_config_del
-    build_webconf
-}
-
-function host_config_del {
-    program_installed jq || return 1
-
-    json_file="$WEB_ROOT/dev/web-hosts.json"
-
-    existing_host=$(jq -r --arg hn "$HOST" '.hosts[] | select(.name == $hn)' $json_file)
-    if [ ! -z "$existing_host" ]; then
-        jq --arg hn "$HOST" 'del(.hosts[] | select(.name == $hn))' $json_file >"temp.json" && mv "temp.json" $json_file
-    fi
-}
-
-function get_web_host_db() {
-    host_name="$1"
-    jq -r --arg host "$host_name" '.hosts[] | select(.name == $host) | .db' $WEB_ROOT/dev/web-hosts.json
-}
-
-function get_db_name() {
-    host_name=$1
-    shift
-    appendix=
-
-    while [ "$#" -gt 0 ]; do
-        case $1 in
-            --appendix=*) appendix=${1#*=} ;;
-            --appendix)   shift; appendix=$1 ;;
-            db|wp)        appendix=$1 ;;
-            *) printf '%s\n' "Unknown option: $1" >&2; return 1 ;;
-        esac
-        shift
-    done
-
-    [ -z "$host_name" ] && { printf '%s\n' "Missing hostname" >&2; return 1; }
-    [ -z "$appendix" ]  && { printf '%s\n' "Missing --appendix db|wp" >&2; return 1; }
-
-    prefix=${host_name%%.*}
-    prefix=$(sanitize_db_identifier "$prefix")
-
-    printf '%s\n' "${prefix}_${appendix}"
-}
-
-function build_service {
-    service=$1
-    no_cache=$2
-    
-    if [ "$no_cache" == "--no-cache" ]; then
-        cache_flag="--no-cache"
-    else
-        cache_flag=""
-    fi
-    
-    if [ -z "$service" ]; then
-        echo "Building all services..."
-        $DC build $cache_flag
-        $DC up -d --force-recreate
-    else
-        echo "Building service: $service"
-        $DC build $cache_flag $service
-        $DC up -d --force-recreate $service
-    fi
-}
-
-function db_cmd {
-    action=$1
-    host_name=$2
-
-    # Check if the host exists in the json file get its db name
-    db_name=$(jq -r --arg hn "$host_name" '.hosts[] | select(.name == $hn) | .db' $WEB_ROOT/dev/web-hosts.json)
-
-    if [ -z "$db_name" ]; then
-        echo "No DB name specified"
-        exit 1
-    fi
-
-    if [ $action == "create" ]; then
-        $DC exec mariadb mariadb -uroot -psecret -e "CREATE USER IF NOT EXISTS '${db_name}'@'%' IDENTIFIED BY 'secret';"
-        $DC exec mariadb mariadb -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`;"
-        $DC exec mariadb mariadb -uroot -psecret -e "GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${db_name}'@'%'"
-    else
-        echo "📦 Removing - database: $db_name user: $db_name"
-        $DC exec mariadb mariadb -uroot -psecret -e "DROP DATABASE IF EXISTS \`${db_name}\`;"
-        $DC exec mariadb mariadb -uroot -psecret -e "DROP USER IF EXISTS '${db_name}'@'%';"
-    fi
-}
-
-function import_ROOT_KEY_to_chrome() {
-    # if WSL exit
-    if [ -n "$WSL_DISTRO_NAME" ]; then
-        echo "This script is not supported on WSL"
-        return 1
-    fi
-
-    cert_filename=$1
-    cert_nickname=${2:-"Root CA"}
-
-    if [ -z "$cert_filename" ] || [ -z "$cert_nickname" ]; then
-        echo "Usage: import_ROOT_KEY_to_chrome <certificate_filename> <certificate_nickname>"
-        return 1
-    fi
-
-    # Convert PEM to DER
-    openssl x509 -outform der -in "$cert_filename" -out "${cert_filename}.der"
-
-    cert_dir="$HOME/.pki/nssdb"
-    if [ ! -d "$cert_dir" ]; then
-        mkdir -p "$cert_dir"
-        certutil -N -d "$cert_dir"
-    fi
-
-    certutil -d sql:$cert_dir -A -t "C,," -n "$cert_nickname" -i "${cert_filename}.der"
-    echo "Certificate ${cert_filename}.der imported to Chrome with nickname $cert_nickname"
-}
-
-case "$CMD" in
-bash)
-    $DC exec franken_php bash
-    ;;
-build)
-    build_service $2 $3
-    ;;
-build-webconf)
-    build_webconf
-    ;;
-debug)
-    mode=$2
-    if [ -z "$mode" ]; then
-        echo "Usage: web dev <mode>"
-        echo "Available modes: off, debug, profile"
-        return 1
-    fi
-    sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$mode/" $SCRIPT_DIR/.env
-    $DC up -d franken_php
-    ;;
-supervisor-conf)
-    generate_supervisor_conf $2
-    ;;
-supervisor-restart)
+supervisor_restart() {
     systemctl is-enabled --quiet supervisor || sudo systemctl enable --now supervisor
     sudo systemctl restart supervisor
     sudo supervisorctl restart all
-    ;;
-dir)
-    echo $SCRIPT_DIR
-    ;;
-fish)
-    $DC exec franken_php fish
-    ;;
-git-update)
-    user=${2}
-    theme=${3}
-    plugin=${4:-lyntouch-modules}
+}
 
-    if [[ -z "$theme" ]]; then
-        echo "Please specify a theme"
+scaffold_wordpress() {
+    local host="$1"
+    require_cmd curl
+    require_cmd tar
+
+    log "Setting up WordPress..."
+
+    local archive="$WEB_ROOT/wordpress.tar.gz"
+    local project_path="$WEB_ROOT/$host"
+
+    if [[ -d "$project_path" ]]; then
+        warn "WordPress $project_path already exists, remove before continuing."
         return 1
     fi
 
-    ssh "${user}@lyntouch.com" "git -C public_html/wp-content/plugins/${plugin} pull; git -C public_html/wp-content/themes/${theme} pull"
-    ;;
-hostssl)
-    add_host_ssl $HOST
-    ;;
-import-rootca)
-    import_ROOT_KEY_to_chrome $ROOT_CRT
-    ;;
-install)
-    ln -sf $SCRIPT_DIR/web.sh $HOME/.local/bin/web
-    ln -sf $SCRIPT_DIR/web.completions.fish $HOME/.config/fish/completions/web.fish
-    ;;
-log)
-    $DC logs -f $2
-    ;;
-new-host)
-    shift # remove the 'new-host' argument
-    parse_args "$@"
-    new_host
-    ;;
-ps)
-    $DC ps $2
-    ;;
-remove-host)
-    shift
-    parse_args "$@"
-    confirm_action "Are you sure you want to remove $HOST?"
-    host_remove $HOST
-    ;;
-restart)
-    if [ -z "$2" ]; then
-        echo "Restarting all containers"
-    else
-        echo "Restarting container: $2"
+    if [[ ! -f "$archive" ]]; then
+        curl -fSL https://en-gb.wordpress.org/latest-en_GB.tar.gz -o "$archive"
     fi
-    $DC restart $2
-    ;;
-rootssl)
-    host_root_ssl_generate
-    # import_ROOT_KEY_to_chrome $ROOT_CRT
-    $DC restart franken_php
-    ;;
-redis-flush)
-    $DC exec redis redis-cli flushall
-    ;;
-redis-monitor)
-    $DC exec redis redis-cli monitor
-    ;;
-stop)
-    $DC stop $2
-    ;;
-down)
-    $DC down
-    ;;
-up)
-    $DC up -d $2
-    ;;
-*)
-    cat <<EOF
-WEB: Shell Utility script for web development
 
-Allowed options:
-    - bash:
-        Access the app service's bash using Docker Compose.
-    - build {service} {?--no-cache}:
-        Build the specified or all Docker Compose service(s).
-    - build-webconf:
-        Rebuilds the web server configuration.
-    - debug {mode}:
-        Enables Xdebug for the app service. Available modes: off, debug, profile
-    - dir:
-        Change directory to the script directory.
-    - fish:
-        Access the app service's fish shell using Docker Compose.
-    - supervisor-conf {host}:
-        Generate supervisor configuration for the specified host.
-    - git-update {user} {theme} {?plugin}:
-        Update the specified theme and plugin via git on lyntouch.com.
-    - hostssl {host}:
-        Generates an SSL certificate for the specified host.
-    - import-rootca:
-        Imports the root Certificate Authority to Chrome.
-    - install:
-        Link the web.sh script to your local binary directory for easier access.
-    - log {service}:
-        Show the logs of the specified or all Docker Compose service(s).
-    - new-host {host}:
-        Set up a new WordPress site for the given host.
-    - ps {service}:
-        List Docker Compose service(s) status.
-    - remove-host {host}:
-        Removes the specified host and all associated configurations.
-    - restart {service}:
-        Restart the specified or all Docker Compose service(s).
-    - supervisor-restart:
-        Restart the supervisor service.
-    - rootssl:
-        Generates a root SSL certificate and restarts the franken_php service.
-    - redis-monitor:
-        Access the redis service's monitor using Docker Compose.
-    - redis-flush:
-        Flush the redis service's cache using Docker Compose.
-    - stop {service}:
-        Stop the specified or all Docker Compose service(s).
-    - down:
-        Stop and remove all Docker Compose service(s).
-    - up {service}:
-        Up the specified or all Docker Compose service(s).
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    info "Extracting WordPress"
+    tar -xzf "$archive" -C "$tmp_dir"
+    mkdir -p "$project_path"
+    mv "$tmp_dir/wordpress/"* "$project_path"
+    rm -rf "$tmp_dir"
 
-Usage examples:
-    web install                              # Link web.sh script to local binary directory
-    cd ?$(web dir)                           # Change directory to the script directory
-    web bash                                 # Access app service's bash using Docker Compose
-    web fish                                 # Access app service's fish shell using Docker Compose
-    web build-webconf                        # Rebuild the web server configuration
-    web build                                # Rebuild all Docker images and recreate all containers
-    web build --no-cache                     # Rebuild all without cache Docker images and recreate all containers
-    web build app                            # Rebuild the app Docker image and recreate the app container
-    web build app --no-cache                 # Rebuild the app without cache Docker image and recreate the app container
-    web restart                              # Restart the web server and rebuild the web server configuration
-    web ps                                   # List all Docker Compose services
-    web ps app                               # List the app Docker Compose service
-    web new-host <hostname> [-t wp|laravel]  # Set up a new WordPress site for example.com
-    web remove-host example.com              # Remove the host example.com and all associated configurations
-    web rootssl                              # Generate a root SSL certificate and import it to Chrome. Then rebuild the php service.
-    web hostssl example.com                  # Generate an SSL certificate for the host example.com
-    web import-rootca                        # Import the root Certificate Authority to Chrome
+    local root_name db_name sample_conf dest_conf
+    root_name=$(hostname_root "$host")
+    db_name=$(make_db_name "$host" "wp")
+    sample_conf="$project_path/wp-config-sample.php"
+    dest_conf="$project_path/wp-config.php"
+
+    [[ ! -f "$dest_conf" ]] && mv "$sample_conf" "$dest_conf"
+
+    sed -i "s/username_here/root/g;s/database_name_here/$db_name/g;s/password_here/secret/g;s/localhost/mariadb/g" \
+        "$dest_conf"
+}
+
+scaffold_laravel() {
+    local host="$1"
+    local project_path="$WEB_ROOT/$host"
+
+    log "Setting up Laravel for $host..."
+
+    if [[ -d "$project_path" ]]; then
+        warn "Laravel project $project_path already exists."
+        return 1
+    fi
+
+    mkdir -p "$project_path"
+    composer create-project --prefer-dist laravel/laravel "$project_path"
+}
+
+new_host() {
+    local host="$1"
+    local host_type="$2"
+
+    require_docker
+    ensure_jq
+    require_host "$host" "new-host"
+
+    local db_name
+    db_name=$(make_db_name "$host" "$host_type")
+
+    case "$host_type" in
+        wp|wordpress)
+            scaffold_wordpress "$host"
+            ;;
+        laravel)
+            supervisor_generate_conf "$host"
+            scaffold_laravel "$host"
+            ;;
+        *)
+            die "Invalid type '$host_type'. Use: wp, wordpress, or laravel."
+            ;;
+    esac
+
+    hosts_json_add "$host" "$host_type" "$db_name"
+    redirect_add "$host"
+    build_webconf
+}
+
+remove_host() {
+    local host="$1"
+    require_host "$host" "remove-host"
+
+    local db_name
+    db_name=$(hosts_json_get_db "$host")
+    [[ -n "$db_name" ]] && db_remove "$host"
+
+    log "Removing $WEB_ROOT/$host"
+    rm -rf "${WEB_ROOT:?}/$host"
+
+    redirect_remove "$host"
+    hosts_json_remove "$host"
+    build_webconf
+}
+
+dc_build() {
+    local service="${1:-}"
+    local cache_flag="${2:-}"
+
+    [[ "$cache_flag" == "--no-cache" ]] || cache_flag=""
+
+    if [[ -z "$service" ]]; then
+        log "Building all services..."
+        $DC build $cache_flag
+        $DC up -d --force-recreate
+    else
+        log "Building service: $service"
+        $DC build $cache_flag "$service"
+        $DC up -d --force-recreate "$service"
+    fi
+}
+
+parse_new_host_args() {
+    HOST=""
+    TYPE="wp"
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -t) TYPE="${2:-}"; shift 2 ;;
+            *)  HOST="$1"; shift ;;
+        esac
+    done
+    require_host "$HOST" "new-host <hostname> -t <wp|laravel>"
+}
+
+show_help() {
+    cat <<'EOF'
+web.sh - Docker-based PHP development environment manager
+
+Usage: web <command> [options]
+
+Environment:
+  up [service]                  Start all or specified Docker services
+  down                          Stop and remove all Docker services
+  stop [service]                Stop all or specified Docker services
+  restart [service]             Restart all or specified Docker services
+  build [service] [--no-cache]  Build all or specified Docker services
+  ps [service]                  Show Docker container status
+  log <service>                 View logs for a Docker service
+
+Host Management:
+  new-host <host> [-t wp|laravel]  Create new WordPress or Laravel site
+  remove-host <host>               Remove site, DB, SSL, and host entry
+  build-webconf                    Regenerate Caddy configs from web-hosts.json
+
+Shell Access:
+  bash                          Access container Bash shell
+  fish                          Access container Fish shell
+
+SSL:
+  rootssl                       Generate root CA certificate
+  hostssl <host>                Generate SSL certificate for a host
+  import-rootca                 Import root CA to Chrome (Linux only)
+
+Database & Caching:
+  redis-flush                   Flush Redis cache
+  redis-monitor                 Monitor Redis activity
+
+Debugging:
+  debug <off|debug|profile>     Set Xdebug mode
+
+Supervisor:
+  supervisor-conf <host>        Generate Supervisor config for Laravel Horizon
+  supervisor-restart            Restart Supervisor service
+
+Utilities:
+  install                       Create symlinks for CLI and Fish completions
+  dir                           Print the script directory path
+  git-update <user> <theme> [plugin]  Update theme/plugin via git on lyntouch.com
+
+Examples:
+  web install                              Link web.sh to ~/.local/bin/web
+  web new-host example.test -t wp          Create a WordPress site
+  web new-host api.test -t laravel         Create a Laravel project
+  web remove-host example.test             Remove a site completely
+  web build                                Rebuild all Docker images
+  web build franken_php --no-cache         Rebuild PHP service without cache
+  web debug debug                          Enable Xdebug debugging
+  web rootssl                              Generate root CA certificate
+  web hostssl example.test                 Generate host SSL certificate
 EOF
-    ;;
-esac
+}
+
+main() {
+    local cmd="${1:-help}"
+    shift 2>/dev/null || true
+
+    case "$cmd" in
+        up)       $DC up -d "$@" ;;
+        down)     $DC down ;;
+        stop)     $DC stop "$@" ;;
+        restart)
+            if [[ $# -eq 0 ]]; then
+                log "Restarting all containers"
+            else
+                log "Restarting container: $1"
+            fi
+            $DC restart "$@"
+            ;;
+        build)    dc_build "$@" ;;
+        ps)       $DC ps "$@" ;;
+        log)      $DC logs -f "$@" ;;
+
+        new-host)
+            parse_new_host_args "$@"
+            new_host "$HOST" "$TYPE"
+            ;;
+        remove-host)
+            parse_new_host_args "$@"
+            confirm "Are you sure you want to remove $HOST?" || exit 0
+            remove_host "$HOST"
+            ;;
+        build-webconf) build_webconf ;;
+
+        bash) $DC exec franken_php bash ;;
+        fish) $DC exec franken_php fish ;;
+
+        rootssl)
+            ssl_generate_root
+            $DC restart franken_php
+            ;;
+        hostssl)
+            require_host "${1:-}" "hostssl"
+            ssl_generate_host "$1"
+            ;;
+        import-rootca)
+            ssl_import_root_to_chrome "$ROOT_CRT"
+            ;;
+
+        redis-flush)   $DC exec redis redis-cli flushall ;;
+        redis-monitor) $DC exec redis redis-cli monitor ;;
+
+        debug)
+            local mode="${1:-}"
+            [[ -z "$mode" ]] && die "Usage: web debug <off|debug|profile>"
+            sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$mode/" "$SCRIPT_DIR/.env"
+            $DC up -d franken_php
+            ;;
+
+        supervisor-conf)    supervisor_generate_conf "${1:-}" ;;
+        supervisor-restart) supervisor_restart ;;
+
+        install)
+            ln -sf "$SCRIPT_DIR/web.sh" "$HOME/.local/bin/web"
+            ln -sf "$SCRIPT_DIR/web.completions.fish" "$HOME/.config/fish/completions/web.fish"
+            info "Symlinks created."
+            ;;
+        dir)
+            echo "$SCRIPT_DIR"
+            ;;
+        git-update)
+            local user="${1:-}" theme="${2:-}" plugin="${3:-lyntouch-modules}"
+            [[ -z "$theme" ]] && die "Usage: web git-update <user> <theme> [plugin]"
+            ssh "${user}@lyntouch.com" \
+                "git -C public_html/wp-content/plugins/${plugin} pull; git -C public_html/wp-content/themes/${theme} pull"
+            ;;
+
+        help|--help|-h|*) show_help ;;
+    esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi
