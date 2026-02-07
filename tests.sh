@@ -180,6 +180,25 @@ test_parse_args_no_host_fails() {
     assert_contains "$(parse_new_host_args 2>&1 || true)" "No hostname specified"
 }
 
+test_supervisor_conf_creates_file() {
+    local outdir="$TEST_TMPDIR/supervisor"; mkdir -p "$outdir"
+    supervisor_generate_conf "myapp.test" "$outdir" >/dev/null 2>&1
+    [[ -f "$outdir/myapp_test.conf" ]] || { echo "    FAIL: conf file not created"; return 1; }
+}
+
+test_supervisor_conf_content() {
+    local outdir="$TEST_TMPDIR/supervisor"; mkdir -p "$outdir"
+    supervisor_generate_conf "myapp.test" "$outdir" >/dev/null 2>&1
+    local content; content=$(cat "$outdir/myapp_test.conf")
+    assert_contains "$content" "[program:myapp_test]" &&
+    assert_contains "$content" "artisan horizon" &&
+    assert_contains "$content" "$WEB_ROOT/myapp.test/artisan"
+}
+
+test_supervisor_conf_no_host_fails() {
+    assert_contains "$(supervisor_generate_conf "" 2>&1 || true)" "No hostname specified"
+}
+
 test_main_help()    { assert_contains "$(main help)" "Usage: web"; }
 test_main_no_args() { assert_contains "$(main)" "Usage: web"; }
 test_main_dir()     { assert_eq "$SCRIPT_DIR" "$(main dir)"; }
