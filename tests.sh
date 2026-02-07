@@ -73,6 +73,7 @@ test_parse_args_defaults()        { parse_new_host_args "mysite.test"; assert_eq
 test_parse_args_explicit_type()   { parse_new_host_args "mysite.test" -t laravel; assert_eq "mysite.test" "$HOST" && assert_eq "laravel" "$TYPE"; }
 test_parse_args_type_first()      { parse_new_host_args -t laravel "mysite.test"; assert_eq "mysite.test" "$HOST" && assert_eq "laravel" "$TYPE"; }
 test_parse_args_no_host_fails()   { assert_contains "$(parse_new_host_args 2>&1 || true)" "No hostname specified"; }
+test_parse_args_t_no_value()      { assert_contains "$(parse_new_host_args mysite.test -t 2>&1 || true)" "Option -t requires a value"; }
 
 test_main_help()    { assert_contains "$(main help)" "Usage: web"; }
 test_main_no_args() { assert_contains "$(main)" "Usage: web"; }
@@ -174,6 +175,23 @@ test_supervisor_conf_content() {
 
 test_supervisor_conf_no_host_fails() { assert_contains "$(supervisor_generate_conf "" 2>&1 || true)" "No hostname specified"; }
 
+test_remove_host_cleans_ssl() {
+    touch "$CERTS_DIR/cleanup.test.key" "$CERTS_DIR/cleanup.test.crt" "$CERTS_DIR/cleanup.test.csr"
+    hosts_json_add "cleanup.test" "wp" "cleanup_wp" >/dev/null
+    DC="echo" remove_host "cleanup.test" >/dev/null 2>&1
+    [[ ! -f "$CERTS_DIR/cleanup.test.key" && ! -f "$CERTS_DIR/cleanup.test.crt" && ! -f "$CERTS_DIR/cleanup.test.csr" ]] \
+        || { echo "    FAIL: SSL files not cleaned up"; return 1; }
+}
+
+test_remove_host_cleans_supervisor() {
+    local supdir="$TEST_TMPDIR/supervisor/conf.d"; mkdir -p "$supdir"
+    SUPERVISOR_DIR="$TEST_TMPDIR/supervisor"
+    touch "$supdir/cleanup_test.conf"
+    hosts_json_add "cleanup.test" "wp" "cleanup_wp" >/dev/null
+    DC="echo" remove_host "cleanup.test" >/dev/null 2>&1
+    [[ ! -f "$supdir/cleanup_test.conf" ]] || { echo "    FAIL: supervisor conf not cleaned up"; return 1; }
+}
+
 echo ""
 echo "web.sh tests"
 echo "============"
@@ -181,13 +199,14 @@ echo ""
 
 run_group test_hostname_root_{simple,single,subdomain,deep,known_sld,sld_sub}
 run_group test_make_db_name_{wp,wordpress,laravel,subdomain,numeric,hyphenated,deep_sub,single,unknown_type}
-run_group test_parse_args_{defaults,explicit_type,type_first,no_host_fails}
+run_group test_parse_args_{defaults,explicit_type,type_first,no_host_fails,t_no_value}
 run_group test_main_{help,no_args,dir,debug_no_mode,debug_sets_mode}
 run_group test_hosts_json_{add,add_sets_db,add_duplicate_fails,get_nonexistent,ensure_defaults_existing,ensure_defaults_creates}
 run_group test_hosts_json_add_multiple
 run_group test_hosts_json_{remove,remove_preserves_others,remove_add_cycle}
 run_group test_ssl_generate_{root,host,host_idempotent} test_ssl_host_has_san
 run_group test_supervisor_conf_{creates_file,content,no_host_fails}
+run_group test_remove_host_cleans_{ssl,supervisor}
 
 echo ""
 echo "Total: $((PASS + FAIL))  Passed: $PASS  Failed: $FAIL"

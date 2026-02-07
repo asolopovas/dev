@@ -186,7 +186,7 @@ db_remove() {
 }
 
 db_exists() {
-    [[ -n "$(docker exec dev-mariadb-1 mariadb -uroot -psecret -Nse \
+    [[ -n "$($DC exec mariadb mariadb -uroot -psecret -Nse \
         "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='$1'")" ]]
 }
 
@@ -268,7 +268,8 @@ _run_host_mapping_cmdlet() {
 redirect_add() {
     local host="$1"
     if is_wsl; then
-        grep -qP "^\s*127\.0\.0\.1.*${host}(?:\s+|$)" "/mnt/c/Windows/System32/drivers/etc/hosts" 2>/dev/null && return 0
+        local escaped="${host//./\\.}"
+        grep -qP "^\s*127\.0\.0\.1.*${escaped}(?:\s+|$)" "/mnt/c/Windows/System32/drivers/etc/hosts" 2>/dev/null && return 0
         log "Adding host redirection for \"$host\""
         _run_host_mapping_cmdlet "New-HostnameMapping" "$host" || { warn "Failed to add host mapping for $host."; return 1; }
     else
@@ -279,12 +280,13 @@ redirect_add() {
 }
 
 redirect_remove() {
-    local host="$1"
+    local host="$1" escaped
     log "Removing host redirection for \"$host\""
     if is_wsl; then
         _run_host_mapping_cmdlet "Remove-HostnameMapping" "$host" || { warn "Failed to remove host mapping for $host."; return 1; }
     else
-        grep -q "$host" /etc/hosts 2>/dev/null && sudo sed -i.bak "/$host/d" /etc/hosts
+        escaped="${host//./\\.}"
+        grep -q "$escaped" /etc/hosts 2>/dev/null && sudo sed -i.bak "/$escaped/d" /etc/hosts
     fi
 }
 
@@ -379,7 +381,7 @@ supervisor_restart() {
 }
 
 scaffold_wordpress() {
-    local host="$1" archive="$WEB_ROOT/wordpress.tar.gz" path="$WEB_ROOT/$host"
+    local host="$1" db_name="$2" archive="$WEB_ROOT/wordpress.tar.gz" path="$WEB_ROOT/$host"
     require_cmd curl; require_cmd tar
     [[ -d "$path" ]] && { warn "WordPress $path already exists."; return 1; }
     [[ -f "$archive" ]] || curl -fSL https://en-gb.wordpress.org/latest-en_GB.tar.gz -o "$archive"
@@ -387,25 +389,22 @@ scaffold_wordpress() {
     info "Extracting WordPress"
     tar -xzf "$archive" -C "$tmp"
     mkdir -p "$path" && mv "$tmp/wordpress/"* "$path" && rm -rf "$tmp"
-    local db conf="$path/wp-config.php"
-    db=$(make_db_name "$host" "wp")
+    local conf="$path/wp-config.php"
     [[ ! -f "$conf" ]] && mv "$path/wp-config-sample.php" "$conf"
-    sed -i "s/username_here/root/g;s/database_name_here/$db/g;s/password_here/secret/g;s/localhost/mariadb/g" "$conf"
+    sed -i "s/username_here/root/g;s/database_name_here/$db_name/g;s/password_here/secret/g;s/localhost/mariadb/g" "$conf"
 }
 
 scaffold_laravel() {
-    local host="$1" path="$WEB_ROOT/$host"
+    local host="$1" db_name="$2" path="$WEB_ROOT/$host"
     [[ -d "$path" ]] && { warn "Laravel project $path already exists."; return 1; }
-    mkdir -p "$path"
     composer create-project --prefer-dist laravel/laravel "$path"
-    local db; db=$(make_db_name "$host" "laravel")
     sed -i \
         -e "s|APP_URL=.*|APP_URL=https://$host|" \
         -e "s|^DB_CONNECTION=.*|DB_CONNECTION=mysql|" \
         -e "s|^# DB_HOST=.*|DB_HOST=mariadb|" \
         -e "s|^# DB_PORT=.*|DB_PORT=3306|" \
-        -e "s|^# DB_DATABASE=.*|DB_DATABASE=$db|" \
-        -e "s|^# DB_USERNAME=.*|DB_USERNAME=$db|" \
+        -e "s|^# DB_DATABASE=.*|DB_DATABASE=$db_name|" \
+        -e "s|^# DB_USERNAME=.*|DB_USERNAME=$db_name|" \
         -e "s|^# DB_PASSWORD=.*|DB_PASSWORD=secret|" \
         "$path/.env"
 }
@@ -415,8 +414,8 @@ new_host() {
     require_docker; ensure_jq; require_host "$host" "new-host"
     [[ -z "$db_name" ]] && db_name=$(make_db_name "$host" "$host_type")
     case "$host_type" in
-        wp|wordpress) scaffold_wordpress "$host" ;;
-        laravel)      scaffold_laravel "$host"
+        wp|wordpress) scaffold_wordpress "$host" "$db_name" ;;
+        laravel)      scaffold_laravel "$host" "$db_name"
                       [[ "$with_supervisor" == "true" ]] && supervisor_generate_conf "$host" ;;
         *)            die "Invalid type '$host_type'. Use: wp, wordpress, or laravel." ;;
     esac
@@ -427,10 +426,13 @@ new_host() {
 }
 
 remove_host() {
-    local host="$1"; require_host "$host" "remove-host"
+    local host="$1" hu; require_host "$host" "remove-host"
+    hu="${host//./_}"
     [[ -n "$(hosts_json_get_db "$host")" ]] && db_remove "$host"
     log "Removing $WEB_ROOT/$host"
     rm -rf "${WEB_ROOT:?}/$host"
+    rm -f "$CERTS_DIR/$host".{key,crt,csr}
+    rm -f "$SUPERVISOR_DIR/conf.d/${hu}.conf"
     redirect_remove "$host"
     hosts_json_remove "$host"
     build_webconf
@@ -446,7 +448,7 @@ dc_build() {
 parse_new_host_args() {
     HOST="" ; TYPE="wp"
     while [[ $# -gt 0 ]]; do
-        case "$1" in -t) TYPE="${2:-}"; shift 2 ;; *) HOST="$1"; shift ;; esac
+        case "$1" in -t) [[ -n "${2:-}" ]] || die "Option -t requires a value (wp or laravel)."; TYPE="$2"; shift 2 ;; *) HOST="$1"; shift ;; esac
     done
     require_host "$HOST" "new-host <hostname> -t <wp|laravel>"
 }

@@ -28,7 +28,7 @@ web up                               # start services
 | `build [service] [--no-cache]` | Build Docker images |
 | `ps [service]` | Container status |
 | `log <service>` | Service logs |
-| `new-host <host> -t <wp\|laravel>` | Create site with SSL, DB, configs |
+| `new-host [host] [-t type]` | Create site (wizard or flags) |
 | `remove-host <host>` | Remove site completely |
 | `build-webconf` | Regenerate Caddy configs |
 | `bash` / `fish` | Container shell access |
@@ -37,6 +37,7 @@ web up                               # start services
 | `import-rootca` | Import root CA to Chrome (Linux) |
 | `redis-flush` / `redis-monitor` | Redis management |
 | `debug <off\|debug\|profile>` | Set Xdebug mode |
+| `supervisor-init` | Initialize user-level Supervisor |
 | `supervisor-conf <host>` | Generate Horizon supervisor config |
 | `supervisor-restart` | Restart Supervisor |
 | `install` | Create CLI and Fish completion symlinks |
