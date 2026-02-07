@@ -35,6 +35,55 @@ confirm() {
     done
 }
 
+select_option() {
+    local prompt="$1"; shift
+    local options=("$@") selected=0 key
+    printf '%s\n' "$prompt" >&2
+    tput civis >&2
+    trap 'tput cnorm >&2' RETURN
+    while true; do
+        for i in "${!options[@]}"; do
+            ((i == selected)) && printf '  \033[32m> %s\033[0m\n' "${options[i]}" >&2 \
+                              || printf '    %s\n' "${options[i]}" >&2
+        done
+        read -rsn1 key
+        [[ "$key" == $'\x1b' ]] && { read -rsn2 key; case "$key" in
+            '[A') ((selected > 0)) && ((selected--)) ;; '[B') ((selected < ${#options[@]} - 1)) && ((selected++)) ;;
+        esac; }
+        [[ "$key" == "" ]] && break
+        printf '\033[%dA\033[J' "${#options[@]}" >&2
+    done
+    echo "${options[selected]}"
+}
+
+prompt_input() {
+    local prompt="$1" default="$2" reply
+    if [[ -n "$default" ]]; then
+        read -rp "$prompt [$default]: " reply
+        echo "${reply:-$default}"
+    else
+        while [[ -z "${reply:-}" ]]; do read -rp "$prompt: " reply; done
+        echo "$reply"
+    fi
+}
+
+new_host_wizard() {
+    HOST=$(prompt_input "Hostname" "")
+    TYPE=$(select_option "Site type:" "wp" "laravel")
+    local default_db; default_db=$(make_db_name "$HOST" "$TYPE")
+    DB_NAME=$(prompt_input "Database name" "$default_db")
+    local with_supervisor=false
+    [[ "$TYPE" == "laravel" ]] && confirm "Generate Supervisor config?" && with_supervisor=true
+    echo ""
+    log "Hostname:   $HOST"
+    log "Type:       $TYPE"
+    log "Database:   $DB_NAME"
+    [[ "$TYPE" == "laravel" ]] && log "Supervisor: $with_supervisor"
+    echo ""
+    confirm "Proceed?" || { warn "Aborted."; return 1; }
+    new_host "$HOST" "$TYPE" "$DB_NAME" "$with_supervisor"
+}
+
 is_wsl() {
     [[ -z "$_IS_WSL" ]] && { grep -q WSL /proc/version 2>/dev/null && _IS_WSL=1 || _IS_WSL=0; }
     ((_IS_WSL))
@@ -288,7 +337,7 @@ supervisor_init() {
 	pidfile=$SUPERVISOR_DIR/supervisord.pid
 	
 	[rpcinterface:supervisor]
-	supervisor.rpcinterface_factory = supervisor.xmlrpc:make_RPCInterface
+	supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
 	
 	[supervisorctl]
 	serverurl=unix://$SUPERVISOR_DIR/supervisor.sock
@@ -362,14 +411,16 @@ scaffold_laravel() {
 }
 
 new_host() {
-    local host="$1" host_type="$2"
+    local host="$1" host_type="$2" db_name="${3:-}" with_supervisor="${4:-true}"
     require_docker; ensure_jq; require_host "$host" "new-host"
+    [[ -z "$db_name" ]] && db_name=$(make_db_name "$host" "$host_type")
     case "$host_type" in
         wp|wordpress) scaffold_wordpress "$host" ;;
-        laravel)      scaffold_laravel "$host"; supervisor_generate_conf "$host" ;;
+        laravel)      scaffold_laravel "$host"
+                      [[ "$with_supervisor" == "true" ]] && supervisor_generate_conf "$host" ;;
         *)            die "Invalid type '$host_type'. Use: wp, wordpress, or laravel." ;;
     esac
-    hosts_json_add "$host" "$host_type" "$(make_db_name "$host" "$host_type")"
+    hosts_json_add "$host" "$host_type" "$db_name"
     redirect_add "$host"
     build_webconf
     [[ "$host_type" == "laravel" ]] && $DC exec franken_php php "/var/www/$host/artisan" migrate --force
@@ -416,7 +467,7 @@ Environment:
   log <service>                 View service logs
 
 Hosts:
-  new-host <host> [-t type]     Create site (wp|laravel)
+  new-host [host] [-t type]     Create site (interactive wizard or flags)
   remove-host <host>            Remove site completely
   build-webconf                 Regenerate Caddy configs
 
@@ -452,7 +503,8 @@ main() {
         build)            dc_build "$@" ;;
         ps)               $DC ps "$@" ;;
         log)              $DC logs -f "$@" ;;
-        new-host)         parse_new_host_args "$@"; new_host "$HOST" "$TYPE" ;;
+        new-host)         if [[ $# -eq 0 ]]; then new_host_wizard
+                          else parse_new_host_args "$@"; new_host "$HOST" "$TYPE"; fi ;;
         remove-host)      parse_new_host_args "$@"; confirm "Remove $HOST?" && remove_host "$HOST" ;;
         build-webconf)    build_webconf ;;
         bash)             $DC exec franken_php bash ;;
