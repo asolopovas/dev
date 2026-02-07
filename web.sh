@@ -342,6 +342,17 @@ scaffold_laravel() {
     [[ -d "$project_path" ]] && { warn "Laravel project $project_path already exists."; return 1; }
     mkdir -p "$project_path"
     composer create-project --prefer-dist laravel/laravel "$project_path"
+    local env_file="$project_path/.env" db_name
+    db_name=$(make_db_name "$host" "laravel")
+    sed -i \
+        -e "s|APP_URL=.*|APP_URL=https://$host|" \
+        -e "s|^DB_CONNECTION=.*|DB_CONNECTION=mysql|" \
+        -e "s|^# DB_HOST=.*|DB_HOST=mariadb|" \
+        -e "s|^# DB_PORT=.*|DB_PORT=3306|" \
+        -e "s|^# DB_DATABASE=.*|DB_DATABASE=$db_name|" \
+        -e "s|^# DB_USERNAME=.*|DB_USERNAME=$db_name|" \
+        -e "s|^# DB_PASSWORD=.*|DB_PASSWORD=secret|" \
+        "$env_file"
 }
 
 new_host() {
@@ -350,7 +361,8 @@ new_host() {
     local db_name; db_name=$(make_db_name "$host" "$host_type")
     case "$host_type" in
         wp|wordpress) scaffold_wordpress "$host" ;;
-        laravel)      supervisor_generate_conf "$host"; scaffold_laravel "$host" ;;
+        laravel)      scaffold_laravel "$host"
+                      [[ -d /etc/supervisor/conf.d ]] && supervisor_generate_conf "$host" ;;
         *)            die "Invalid type '$host_type'. Use: wp, wordpress, or laravel." ;;
     esac
     hosts_json_add "$host" "$host_type" "$db_name"
