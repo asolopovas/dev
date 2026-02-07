@@ -1,40 +1,26 @@
-set std_cmds 'build-webconf debug fish hostssl import-rootca install new-host redis-flush redis-monitor remove-host restart rootssl supervisor-conf supervisor-restart'
-set debug_cmds 'off develop coverage debug profile trace'
-set docker_cmds_build 'build'
-set docker_cmds_other 'log restart ps'
-set level1 (string join ' ' $std_cmds $docker_cmds_build $docker_cmds_other)
+set -l cmds up down stop restart build ps log new-host remove-host build-webconf bash fish rootssl hostssl import-rootca redis-flush redis-monitor debug supervisor-conf supervisor-restart install dir git-update
+set -l containers franken_php mariadb redis phpmyadmin mailhog
+set -l debug_modes off develop coverage debug profile trace
 
-set containers 'franken_php mariadb redis phpmyadmin mailhog'
-set no_cache ' --no-cache'
-set containers_with_no_cache (string join '' $containers $no_cache)
-
-function __fish_web_test_command
-    set -l cmd (commandline -opc)
-    set -l cmd_len (count $cmd)
-    set -l arg_len (count $argv)
-
-    if test $cmd_len -eq $argv[1]
-        if test $arg_len -gt 1; and not test $cmd[$cmd_len] = $argv[$arg_len];
-            return 1
-        end
-        return 0
-    end
-    return 1
+function __fish_web_needs_cmd
+    test (count (commandline -opc)) -eq 1
 end
 
-function __fish_web_test_no_cache_command
+function __fish_web_using_cmd
     set -l cmd (commandline -opc)
-    set -l cmd_len (count $cmd)
-    if test $cmd_len -eq 3; and test $cmd[2] = 'build'
-        return 0
-    end
-    return 1
+    test (count $cmd) -eq 2; and test $cmd[2] = $argv[1]
 end
 
-complete -f -c web -n '__fish_web_test_command 1' -a $level1 -d 'Commands Completions'
-complete -f -c web -n '__fish_web_test_command 2 build' -a $containers_with_no_cache -d 'Containers Completions'
-complete -f -c web -n '__fish_web_test_command 2 debug' -a $debug_cmds -d 'Debug Modes'
-complete -f -c web -n '__fish_web_test_command 2 ps' -a $containers -d 'Containers Completions'
-complete -f -c web -n '__fish_web_test_command 2 log' -a $containers -d 'Containers Completions'
-complete -f -c web -n '__fish_web_test_command 2 restart' -a $containers -d 'Containers Completions'
-complete -f -c web -n '__fish_web_test_no_cache_command' -a $no_cache -d 'No-Cache argument'
+function __fish_web_build_third
+    set -l cmd (commandline -opc)
+    test (count $cmd) -eq 3; and test $cmd[2] = build
+end
+
+complete -f -c web -n __fish_web_needs_cmd -a "$cmds"
+complete -f -c web -n '__fish_web_using_cmd build' -a "$containers --no-cache"
+complete -f -c web -n '__fish_web_using_cmd debug' -a "$debug_modes"
+complete -f -c web -n '__fish_web_using_cmd ps' -a "$containers"
+complete -f -c web -n '__fish_web_using_cmd log' -a "$containers"
+complete -f -c web -n '__fish_web_using_cmd restart' -a "$containers"
+complete -f -c web -n '__fish_web_using_cmd stop' -a "$containers"
+complete -f -c web -n __fish_web_build_third -a --no-cache

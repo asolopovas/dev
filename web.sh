@@ -15,165 +15,84 @@ ROOT_KEY="$CERTS_DIR/rootCA.key"
 ROOT_CRT="$CERTS_DIR/rootCA.crt"
 DC="docker compose -f $SCRIPT_DIR/docker-compose.yml"
 KNOWN_SLDS="co.uk gov.uk com.br co.jp"
-
 _HOSTS_MODULE_PATH_CACHED=""
 
-die() {
-    printf '\033[31mError: %s\033[0m\n' "$1" >&2
-    exit 1
-}
+die()  { printf '\033[31mError: %s\033[0m\n' "$1" >&2; exit 1; }
+warn() { printf '\033[0;33m%s\033[0m\n' "$1" >&2; }
+info() { printf '\033[0;32m%s\033[0m\n' "$1"; }
+log()  { printf '%s\n' "$1"; }
 
-warn() {
-    printf '\033[0;33m%s\033[0m\n' "$1" >&2
-}
+require_cmd()    { command -v "$1" &>/dev/null || die "$1 is not installed."; }
+require_host()   { [[ -n "${1:-}" ]] || die "No hostname specified. Usage: web $2 <hostname>"; }
+require_docker() { require_cmd docker; docker info &>/dev/null || die "Docker daemon is not running."; }
 
-info() {
-    printf '\033[0;32m%s\033[0m\n' "$1"
-}
-
-log() {
-    printf '%s\n' "$1"
-}
-
-require_cmd() {
-    local cmd="$1"
-    command -v "$cmd" &>/dev/null || die "$cmd is not installed."
-}
-
-require_host() {
-    [[ -n "${1:-}" ]] || die "No hostname specified. Usage: web $2 <hostname>"
-}
-
-require_docker() {
-    require_cmd docker
-    docker info &>/dev/null || die "Docker daemon is not running. Start Docker Desktop and ensure WSL integration is enabled."
-}
-
-ensure_jq() {
-    if ! command -v jq &>/dev/null; then
-        log "jq is not installed. Installing jq..."
-        sudo apt update && sudo apt install -y jq
-    fi
-}
+ensure_jq() { command -v jq &>/dev/null || { log "Installing jq..."; sudo apt update && sudo apt install -y jq; }; }
 
 confirm() {
     local reply
     while true; do
-        read -rp "$1 [y/n] " -n 1 reply
-        echo
+        read -rp "$1 [y/n] " -n 1 reply; echo
         case "$reply" in
-            [Yy]) return 0 ;;
-            [Nn]) log "Aborting."; return 1 ;;
-            *)    warn "Please enter y or n." ;;
+            [Yy]) return 0 ;; [Nn]) return 1 ;; *) warn "Please enter y or n." ;;
         esac
     done
 }
 
-is_wsl() {
-    grep -q WSL /proc/version 2>/dev/null
-}
+is_wsl() { grep -q WSL /proc/version 2>/dev/null; }
 
 powershell_exe() {
-    if command -v pwsh.exe >/dev/null 2>&1; then
-        echo "pwsh.exe"
-    else
-        echo "powershell.exe"
-    fi
+    command -v pwsh.exe >/dev/null 2>&1 && echo "pwsh.exe" || echo "powershell.exe"
 }
 
-hosts_json_query() {
-    jq "$@" "$HOSTS_JSON"
-}
-
-hosts_json_get_host() {
-    local name="$1"
-    hosts_json_query -r --arg hn "$name" '.hosts[] | select(.name == $hn)'
-}
-
-hosts_json_get_db() {
-    local name="$1"
-    hosts_json_query -r --arg hn "$name" '.hosts[] | select(.name == $hn) | .db'
-}
+hosts_json_query()    { jq "$@" "$HOSTS_JSON"; }
+hosts_json_get_host() { hosts_json_query -r --arg hn "$1" '.hosts[] | select(.name == $hn)'; }
+hosts_json_get_db()   { hosts_json_query -r --arg hn "$1" '.hosts[] | select(.name == $hn) | .db'; }
 
 hosts_json_add() {
     local host_name="$1" host_type="$2" db_name="$3"
-    local existing
-    existing=$(hosts_json_get_host "$host_name")
-    if [[ -n "$existing" ]]; then
-        warn "Host $host_name already exists in $HOSTS_JSON."
-        return 1
-    fi
-
-    local new_host
-    new_host=$(jq -n \
-        --arg hn "$host_name" \
-        --arg ht "$host_type" \
-        --arg db "$db_name" \
-        '{name: $hn, type: $ht, db: $db}')
-
-    local tmp
+    [[ -n "$(hosts_json_get_host "$host_name")" ]] && { warn "Host $host_name already exists."; return 1; }
+    local new_host tmp
+    new_host=$(jq -n --arg hn "$host_name" --arg ht "$host_type" --arg db "$db_name" '{name: $hn, type: $ht, db: $db}')
     tmp=$(mktemp)
     jq ".hosts += [$new_host]" "$HOSTS_JSON" > "$tmp" && mv "$tmp" "$HOSTS_JSON"
 }
 
 hosts_json_remove() {
     local host_name="$1"
-    local existing
-    existing=$(hosts_json_get_host "$host_name")
-    [[ -z "$existing" ]] && return 0
-
-    local tmp
-    tmp=$(mktemp)
-    jq --arg hn "$host_name" 'del(.hosts[] | select(.name == $hn))' "$HOSTS_JSON" > "$tmp" \
-        && mv "$tmp" "$HOSTS_JSON"
+    [[ -z "$(hosts_json_get_host "$host_name")" ]] && return 0
+    local tmp; tmp=$(mktemp)
+    jq --arg hn "$host_name" 'del(.hosts[] | select(.name == $hn))' "$HOSTS_JSON" > "$tmp" && mv "$tmp" "$HOSTS_JSON"
 }
 
 hosts_json_ensure_defaults() {
-    if [[ ! -f "$HOSTS_JSON" ]]; then
-        log "No config file found, creating default one"
-        cat > "$HOSTS_JSON" <<-ENDJSON
-		{
-		    "output": "$BACKEND_SITES_DIR",
-		    "template": "$BACKEND_CONFIG_DIR/template.conf",
-		    "WEB_ROOT": "$WEB_ROOT",
-		    "hosts": []
-		}
-		ENDJSON
-        return 1
-    fi
-    return 0
+    [[ -f "$HOSTS_JSON" ]] && return 0
+    log "No config file found, creating default one"
+    cat > "$HOSTS_JSON" <<-ENDJSON
+	{
+	    "output": "$BACKEND_SITES_DIR",
+	    "template": "$BACKEND_CONFIG_DIR/template.conf",
+	    "WEB_ROOT": "$WEB_ROOT",
+	    "hosts": []
+	}
+	ENDJSON
+    return 1
 }
 
 hostname_root() {
     local domain="$1"
-    local -a parts
-    IFS='.' read -r -a parts <<< "$domain"
+    local -a parts; IFS='.' read -r -a parts <<< "$domain"
     local n=${#parts[@]}
-
-    if ((n <= 1)); then
-        echo "$domain"
-        return
-    fi
-
-    local tld_count=1
-    local last_two="${parts[n-2]}.${parts[n-1]}"
-    local sld
-    for sld in $KNOWN_SLDS; do
-        if [[ "$last_two" == "$sld" ]]; then
-            tld_count=2
-            break
-        fi
-    done
-
+    ((n <= 1)) && { echo "$domain"; return; }
+    local tld_count=1 last_two="${parts[n-2]}.${parts[n-1]}" sld
+    for sld in $KNOWN_SLDS; do [[ "$last_two" == "$sld" ]] && { tld_count=2; break; }; done
     local main_idx=$((n - tld_count - 1))
     ((main_idx < 0)) && main_idx=0
     echo "${parts[main_idx]}"
 }
 
 sanitize_db_identifier() {
-    local raw="$1"
     local cleaned
-    cleaned=$(printf '%s' "$raw" | LC_ALL=C tr -c 'A-Za-z0-9_' '_')
+    cleaned=$(printf '%s' "$1" | LC_ALL=C tr -c 'A-Za-z0-9_' '_')
     while [[ "$cleaned" == _* ]]; do cleaned="${cleaned#_}"; done
     [[ -z "$cleaned" ]] && cleaned="db"
     [[ "$cleaned" =~ ^[0-9] ]] && cleaned="db_${cleaned}"
@@ -181,55 +100,34 @@ sanitize_db_identifier() {
 }
 
 make_db_name() {
-    local host="$1"
-    local host_type="$2"
-    local -a parts
-    IFS='.' read -r -a parts <<< "$host"
-    local n=${#parts[@]}
-    local main_domain sub_domain tld_count=1
+    local host="$1" host_type="$2"
+    local -a parts; IFS='.' read -r -a parts <<< "$host"
+    local n=${#parts[@]} main_domain sub_domain tld_count=1
 
     if ((n <= 1)); then
-        main_domain="$host"
-        sub_domain=""
+        main_domain="$host"; sub_domain=""
     else
-        if ((n >= 2)) && ((${#parts[n-2]} <= 3)); then
-            tld_count=2
-        fi
+        ((n >= 2)) && ((${#parts[n-2]} <= 3)) && tld_count=2
         local main_idx=$((n - 1 - tld_count))
         ((main_idx < 0)) && main_idx=0
-        main_domain="${parts[main_idx]}"
-        sub_domain=""
+        main_domain="${parts[main_idx]}"; sub_domain=""
         if ((main_idx > 0)); then
             sub_domain="${parts[0]}"
-            local i
-            for ((i = 1; i < main_idx; i++)); do
-                sub_domain="${sub_domain}.${parts[i]}"
-            done
+            for ((i = 1; i < main_idx; i++)); do sub_domain="${sub_domain}.${parts[i]}"; done
         fi
     fi
 
     local db_name
-    if [[ -z "$sub_domain" || "$sub_domain" == "$main_domain" ]]; then
-        db_name="$main_domain"
-    else
-        db_name="${main_domain}_$(echo "$sub_domain" | tr '.' '_')"
-    fi
-
+    [[ -z "$sub_domain" || "$sub_domain" == "$main_domain" ]] && db_name="$main_domain" || db_name="${main_domain}_$(echo "$sub_domain" | tr '.' '_')"
     case "$host_type" in
-        wordpress|wp) db_name="${db_name}_wp" ;;
-        *)            db_name="${db_name}_db" ;;
+        wordpress|wp) db_name="${db_name}_wp" ;; *) db_name="${db_name}_db" ;;
     esac
-
-    db_name=$(echo "$db_name" | tr '.' '_')
-    sanitize_db_identifier "$db_name"
+    sanitize_db_identifier "$(echo "$db_name" | tr '.' '_')"
 }
 
 db_create() {
-    local host_name="$1"
-    local db_name
-    db_name=$(hosts_json_get_db "$host_name")
-    [[ -z "$db_name" ]] && die "No database configured for host $host_name"
-
+    local db_name; db_name=$(hosts_json_get_db "$1")
+    [[ -z "$db_name" ]] && die "No database configured for host $1"
     log "Creating database and user: $db_name"
     $DC exec mariadb mariadb -uroot -psecret -e "CREATE USER IF NOT EXISTS '${db_name}'@'%' IDENTIFIED BY 'secret';"
     $DC exec mariadb mariadb -uroot -psecret -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`;"
@@ -237,179 +135,111 @@ db_create() {
 }
 
 db_remove() {
-    local host_name="$1"
-    local db_name
-    db_name=$(hosts_json_get_db "$host_name")
+    local db_name; db_name=$(hosts_json_get_db "$1")
     [[ -z "$db_name" ]] && return 0
-
     log "Removing database and user: $db_name"
     $DC exec mariadb mariadb -uroot -psecret -e "DROP DATABASE IF EXISTS \`${db_name}\`;"
     $DC exec mariadb mariadb -uroot -psecret -e "DROP USER IF EXISTS '${db_name}'@'%';"
 }
 
 db_exists() {
-    local db_name="$1"
     local result
     result=$(docker exec dev-mariadb-1 mariadb -u root -psecret -Nse \
-        "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='${db_name}'")
+        "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='$1'")
     [[ -n "$result" ]]
 }
 
-ssl_generate_root() {
-    local filename="${1:-rootCA}"
-    local passphrase="${2:-default}"
-    local validity_days=29200
-    local subject="/C=GB/ST=London/L=London/O=Lyntouch/OU=IT Department/CN=Lyntouch Self-Signed RootCA/emailAddress=info@lyntouch.com"
-
-    local expiry_date
-    expiry_date=$(date -d "+${validity_days} days" "+%Y-%m-%d") \
-        || die "Failed to calculate expiry date."
-
-    mkdir -p "$CERTS_DIR"
-
-    local key_path="$CERTS_DIR/${filename}.key"
-    local crt_path="$CERTS_DIR/${filename}.crt"
-
-    log "Creating Root Certificate Authority:"
-    log "  Key:         $key_path"
-    log "  Cert:        $crt_path"
-    log "  Expires on:  $expiry_date"
-
-    openssl genrsa -des3 -passout "pass:$passphrase" -out "$key_path" 4096 || return 1
-    openssl req -x509 -new -nodes -passin "pass:$passphrase" \
-        -key "$key_path" -sha256 -days "$validity_days" \
-        -subj "$subject" \
-        -out "$crt_path" || return 1
-
-    info "Root CA created successfully"
-}
-
-ssl_generate_host() {
-    local ssl_host="$1"
-    local crt_path="$CERTS_DIR/${ssl_host}.crt"
-    local key_path="$CERTS_DIR/${ssl_host}.key"
-    local csr_path="$CERTS_DIR/${ssl_host}.csr"
-    local subject="/C=GB/ST=London/L=London/O=${ssl_host}/OU=IT Department/CN=Lyntouch Self-Signed Host Certificate/emailAddress=info@lyntouch.com"
-
-    if [[ ! -f "$key_path" ]]; then
-        info "Generating SSL key for $ssl_host"
-        openssl req -new -sha256 -nodes \
-            -out "$csr_path" -newkey rsa:2048 \
-            -subj "$subject" \
-            -keyout "$key_path"
-    fi
-
-    if [[ ! -f "$crt_path" ]]; then
-        info "Generating SSL certificate for $ssl_host"
-        openssl x509 -req -passin pass:default \
-            -in "$csr_path" \
-            -CA "$ROOT_CRT" -CAkey "$ROOT_KEY" \
-            -CAcreateserial -out "$crt_path" \
-            -days 500 -sha256 \
-            -extfile <(ssl_extfile "$ssl_host")
-    fi
-}
-
 ssl_extfile() {
-    local host_name="$1"
     cat <<-EOF
 	authorityKeyIdentifier=keyid,issuer
 	basicConstraints=CA:FALSE
 	keyUsage=digitalSignature,nonRepudiation,keyEncipherment,dataEncipherment
 	subjectAltName = @alt_names
 	[alt_names]
-	DNS.1 = $host_name
+	DNS.1 = $1
 	IP.1 = 127.0.0.1
 	EOF
 }
 
+ssl_generate_root() {
+    local filename="${1:-rootCA}" passphrase="${2:-default}" validity_days=29200
+    local subject="/C=GB/ST=London/L=London/O=Lyntouch/OU=IT Department/CN=Lyntouch Self-Signed RootCA/emailAddress=info@lyntouch.com"
+    local expiry_date; expiry_date=$(date -d "+${validity_days} days" "+%Y-%m-%d") || die "Failed to calculate expiry date."
+    mkdir -p "$CERTS_DIR"
+    local key_path="$CERTS_DIR/${filename}.key" crt_path="$CERTS_DIR/${filename}.crt"
+    log "Creating Root CA: $key_path (expires $expiry_date)"
+    openssl genrsa -des3 -passout "pass:$passphrase" -out "$key_path" 4096 || return 1
+    openssl req -x509 -new -nodes -passin "pass:$passphrase" -key "$key_path" -sha256 -days "$validity_days" -subj "$subject" -out "$crt_path" || return 1
+    info "Root CA created successfully"
+}
+
+ssl_generate_host() {
+    local ssl_host="$1"
+    local crt_path="$CERTS_DIR/${ssl_host}.crt" key_path="$CERTS_DIR/${ssl_host}.key" csr_path="$CERTS_DIR/${ssl_host}.csr"
+    local subject="/C=GB/ST=London/L=London/O=${ssl_host}/OU=IT Department/CN=Lyntouch Self-Signed Host Certificate/emailAddress=info@lyntouch.com"
+    if [[ ! -f "$key_path" ]]; then
+        info "Generating SSL key for $ssl_host"
+        openssl req -new -sha256 -nodes -out "$csr_path" -newkey rsa:2048 -subj "$subject" -keyout "$key_path"
+    fi
+    if [[ ! -f "$crt_path" ]]; then
+        info "Generating SSL certificate for $ssl_host"
+        openssl x509 -req -passin pass:default -in "$csr_path" -CA "$ROOT_CRT" -CAkey "$ROOT_KEY" \
+            -CAcreateserial -out "$crt_path" -days 500 -sha256 -extfile <(ssl_extfile "$ssl_host")
+    fi
+}
+
 ssl_import_root_to_chrome() {
     is_wsl && die "Chrome root CA import is not supported on WSL."
-
-    local cert_file="${1:-$ROOT_CRT}"
-    local cert_nickname="${2:-Root CA}"
+    local cert_file="${1:-$ROOT_CRT}" cert_nickname="${2:-Root CA}"
     [[ -f "$cert_file" ]] || die "Certificate file not found: $cert_file"
-
     openssl x509 -outform der -in "$cert_file" -out "${cert_file}.der"
-
     local cert_dir="$HOME/.pki/nssdb"
-    if [[ ! -d "$cert_dir" ]]; then
-        mkdir -p "$cert_dir"
-        certutil -N -d "$cert_dir"
-    fi
-
+    [[ -d "$cert_dir" ]] || { mkdir -p "$cert_dir"; certutil -N -d "$cert_dir"; }
     certutil -d "sql:$cert_dir" -A -t "C,," -n "$cert_nickname" -i "${cert_file}.der"
     info "Certificate imported to Chrome with nickname: $cert_nickname"
 }
 
 _resolve_hosts_module_path() {
-    if [[ -n "$_HOSTS_MODULE_PATH_CACHED" ]]; then
-        echo "$_HOSTS_MODULE_PATH_CACHED"
-        return 0
-    fi
-
+    [[ -n "$_HOSTS_MODULE_PATH_CACHED" ]] && { echo "$_HOSTS_MODULE_PATH_CACHED"; return 0; }
     local search_paths=(
         "/mnt/c/Users/*/Documents/PowerShell/Modules/Hosts/*/Hosts.psd1"
         "/mnt/c/Users/*/Documents/WindowsPowerShell/Modules/Hosts/*/Hosts.psd1"
         "/mnt/c/Users/*/Documents/PowerShell/Modules/Hosts/*/Hosts.psm1"
         "/mnt/c/Users/*/Documents/WindowsPowerShell/Modules/Hosts/*/Hosts.psm1"
     )
-
-    local match
     shopt -s nullglob
     for candidate in "${search_paths[@]}"; do
-        for match in $candidate; do
-            _HOSTS_MODULE_PATH_CACHED="$match"
-            break 2
-        done
+        for match in $candidate; do _HOSTS_MODULE_PATH_CACHED="$match"; break 2; done
     done
     shopt -u nullglob
-
     echo "$_HOSTS_MODULE_PATH_CACHED"
 }
 
 _run_host_mapping_cmdlet() {
-    local cmdlet="$1"
-    local hostname="$2"
-    local module_path import_cmd ps_command
-
+    local cmdlet="$1" hostname="$2"
+    local module_path import_cmd
     module_path=$(_resolve_hosts_module_path)
-    if [[ -n "$module_path" ]]; then
-        local module_path_win
-        module_path_win=$(wslpath -w "$module_path")
-        import_cmd="Import-Module '$module_path_win' -ErrorAction Stop"
-    else
-        import_cmd="Import-Module Hosts -ErrorAction Stop"
-    fi
-
-    ps_command="& {
+    [[ -n "$module_path" ]] \
+        && import_cmd="Import-Module '$(wslpath -w "$module_path")' -ErrorAction Stop" \
+        || import_cmd="Import-Module Hosts -ErrorAction Stop"
+    "$(powershell_exe)" -NoProfile -Command "& {
         $import_cmd
         \$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-        if (\$isAdmin) {
-            ${cmdlet} '${hostname}'
-        } else {
-            Start-Process -FilePath (Get-Process -Id \$PID).Path -Verb RunAs -Wait -ArgumentList '-NoProfile', '-Command', \"$import_cmd; ${cmdlet} '${hostname}'\"
-        }
+        if (\$isAdmin) { ${cmdlet} '${hostname}' }
+        else { Start-Process -FilePath (Get-Process -Id \$PID).Path -Verb RunAs -Wait -ArgumentList '-NoProfile', '-Command', \"$import_cmd; ${cmdlet} '${hostname}'\" }
     }"
-
-    "$(powershell_exe)" -NoProfile -Command "$ps_command"
 }
 
 redirect_add() {
     local host="$1"
     if is_wsl; then
-        local win_hosts="/mnt/c/Windows/System32/drivers/etc/hosts"
-        if grep -qP "^\s*127\.0\.0\.1.*${host}(?:\s+|$)" "$win_hosts" 2>/dev/null; then
-            return 0
-        fi
+        grep -qP "^\s*127\.0\.0\.1.*${host}(?:\s+|$)" "/mnt/c/Windows/System32/drivers/etc/hosts" 2>/dev/null && return 0
         log "Adding host redirection for \"$host\""
-        _run_host_mapping_cmdlet "New-HostnameMapping" "$host" \
-            || { warn "Failed to add host mapping for $host."; return 1; }
+        _run_host_mapping_cmdlet "New-HostnameMapping" "$host" || { warn "Failed to add host mapping for $host."; return 1; }
     else
-        if ! getent hosts "$host" &>/dev/null; then
-            log "Adding host redirection for \"$host\""
-            echo "127.0.0.1 $host" | sudo tee -a /etc/hosts >/dev/null
-        fi
+        getent hosts "$host" &>/dev/null && return 0
+        log "Adding host redirection for \"$host\""
+        echo "127.0.0.1 $host" | sudo tee -a /etc/hosts >/dev/null
     fi
 }
 
@@ -417,75 +247,45 @@ redirect_remove() {
     local host="$1"
     log "Removing host redirection for \"$host\""
     if is_wsl; then
-        _run_host_mapping_cmdlet "Remove-HostnameMapping" "$host" \
-            || { warn "Failed to remove host mapping for $host."; return 1; }
+        _run_host_mapping_cmdlet "Remove-HostnameMapping" "$host" || { warn "Failed to remove host mapping for $host."; return 1; }
     else
-        if grep -q "$host" /etc/hosts 2>/dev/null; then
-            sudo sed -i.bak "/$host/d" /etc/hosts
-        fi
+        grep -q "$host" /etc/hosts 2>/dev/null && sudo sed -i.bak "/$host/d" /etc/hosts
     fi
 }
 
 build_webconf() {
     hosts_json_ensure_defaults || return 1
-
-    local yaml_file="$SCRIPT_DIR/templates.yml"
-
     find "$BACKEND_SITES_DIR" -type f ! -name 'phpmyadmin.test.conf' ! -name '.gitkeep' -delete
-
     if ! jq -e '.hosts[] | select(.name == "phpmyadmin.test")' "$HOSTS_JSON" >/dev/null 2>&1; then
         redirect_add "phpmyadmin.test"
         ssl_generate_host "phpmyadmin.test"
     fi
 
-    {
-        echo "services:"
-        echo "  franken_php:"
-        echo "    networks:"
-        echo "      dev_network:"
-        echo "        aliases:"
-        hosts_json_query -r '.hosts[].name' | while read -r name; do
-            echo "          - $name"
-        done
-    } > "$yaml_file"
+    { echo "services:"; echo "  franken_php:"; echo "    networks:"; echo "      dev_network:"; echo "        aliases:"
+      hosts_json_query -r '.hosts[].name' | while read -r name; do echo "          - $name"; done
+    } > "$SCRIPT_DIR/templates.yml"
 
     : > "$SCRIPT_DIR/crontab"
-
     local row host_name host_type db serve_root site_conf debugout
     mapfile -t host_entries < <(hosts_json_query -c '.hosts[]')
 
     for row in "${host_entries[@]}"; do
-        host_name=$(jq -r '.name' <<< "$row")
-        host_type=$(jq -r '.type' <<< "$row")
-        db=$(jq -r '.db' <<< "$row")
-
+        host_name=$(jq -r '.name' <<< "$row"); host_type=$(jq -r '.type' <<< "$row"); db=$(jq -r '.db' <<< "$row")
         log "Processing host: $host_name"
+        serve_root="/var/www/$host_name"; site_conf="$BACKEND_SITES_DIR/${host_name}.conf"; debugout="$WEB_ROOT/$host_name/.vscode"
 
-        serve_root="/var/www/$host_name"
-        site_conf="$BACKEND_SITES_DIR/${host_name}.conf"
-        debugout="$WEB_ROOT/$host_name/.vscode"
-
-        if [[ "$host_type" == "wp" || "$host_type" == "wordpress" ]]; then
-            echo "* * * * * cd $serve_root && php $serve_root/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" \
-                >> "$SCRIPT_DIR/crontab"
-        fi
+        [[ "$host_type" == "wp" || "$host_type" == "wordpress" ]] && \
+            echo "* * * * * cd $serve_root && php $serve_root/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" >> "$SCRIPT_DIR/crontab"
 
         redirect_add "$host_name"
         ssl_generate_host "$host_name"
-
         [[ "$host_type" == "laravel" ]] && serve_root="$serve_root/public"
 
         mkdir -p "$debugout"
         sed -e "s|\${HOSTNAME}|$host_name|g" "$SCRIPT_DIR/launch.json" > "$debugout/launch.json"
+        sed -e "s|\${APP_URL}|${host_name}|g" -e "s|\${SERVE_ROOT}|${serve_root}|g" "$BACKEND_CONFIG_DIR/template.conf" > "$site_conf"
 
-        sed -e "s|\${APP_URL}|${host_name}|g" \
-            -e "s|\${SERVE_ROOT}|${serve_root}|g" \
-            "$BACKEND_CONFIG_DIR/template.conf" > "$site_conf"
-
-        if ! db_exists "$db"; then
-            log "Creating missing DB: $db"
-            db_create "$host_name"
-        fi
+        db_exists "$db" || { log "Creating missing DB: $db"; db_create "$host_name"; }
     done
 
     info "Finished building web configs. Restarting Caddy..."
@@ -493,13 +293,8 @@ build_webconf() {
 }
 
 supervisor_generate_conf() {
-    local host="$1"
-    require_host "$host" "supervisor-conf"
-
-    local host_underscored="${host//./_}"
-    local output_dir="${2:-/etc/supervisor/conf.d}"
-    local log_dir="/tmp/supervisor-logs/$host"
-
+    local host="$1"; require_host "$host" "supervisor-conf"
+    local host_underscored="${host//./_}" output_dir="${2:-/etc/supervisor/conf.d}" log_dir="/tmp/supervisor-logs/$host"
     sudo mkdir -p "$log_dir"
     sudo tee "$output_dir/${host_underscored}.conf" >/dev/null <<-EOF
 	[program:$host_underscored]
@@ -515,7 +310,6 @@ supervisor_generate_conf() {
 	stdout_logfile=$log_dir/worker.log
 	stopwaitsecs=3600
 	EOF
-
     info "Supervisor config generated at $output_dir/${host_underscored}.conf"
 }
 
@@ -526,269 +320,149 @@ supervisor_restart() {
 }
 
 scaffold_wordpress() {
-    local host="$1"
-    require_cmd curl
-    require_cmd tar
-
-    log "Setting up WordPress..."
-
-    local archive="$WEB_ROOT/wordpress.tar.gz"
-    local project_path="$WEB_ROOT/$host"
-
-    if [[ -d "$project_path" ]]; then
-        warn "WordPress $project_path already exists, remove before continuing."
-        return 1
-    fi
-
-    if [[ ! -f "$archive" ]]; then
-        curl -fSL https://en-gb.wordpress.org/latest-en_GB.tar.gz -o "$archive"
-    fi
-
-    local tmp_dir
-    tmp_dir=$(mktemp -d)
+    local host="$1" archive="$WEB_ROOT/wordpress.tar.gz" project_path="$WEB_ROOT/$host"
+    require_cmd curl; require_cmd tar
+    [[ -d "$project_path" ]] && { warn "WordPress $project_path already exists."; return 1; }
+    [[ -f "$archive" ]] || curl -fSL https://en-gb.wordpress.org/latest-en_GB.tar.gz -o "$archive"
+    local tmp_dir; tmp_dir=$(mktemp -d)
     info "Extracting WordPress"
     tar -xzf "$archive" -C "$tmp_dir"
     mkdir -p "$project_path"
     mv "$tmp_dir/wordpress/"* "$project_path"
     rm -rf "$tmp_dir"
-
-    local root_name db_name sample_conf dest_conf
-    root_name=$(hostname_root "$host")
+    local db_name dest_conf
     db_name=$(make_db_name "$host" "wp")
-    sample_conf="$project_path/wp-config-sample.php"
     dest_conf="$project_path/wp-config.php"
-
-    [[ ! -f "$dest_conf" ]] && mv "$sample_conf" "$dest_conf"
-
-    sed -i "s/username_here/root/g;s/database_name_here/$db_name/g;s/password_here/secret/g;s/localhost/mariadb/g" \
-        "$dest_conf"
+    [[ ! -f "$dest_conf" ]] && mv "$project_path/wp-config-sample.php" "$dest_conf"
+    sed -i "s/username_here/root/g;s/database_name_here/$db_name/g;s/password_here/secret/g;s/localhost/mariadb/g" "$dest_conf"
 }
 
 scaffold_laravel() {
-    local host="$1"
-    local project_path="$WEB_ROOT/$host"
-
-    log "Setting up Laravel for $host..."
-
-    if [[ -d "$project_path" ]]; then
-        warn "Laravel project $project_path already exists."
-        return 1
-    fi
-
+    local host="$1" project_path="$WEB_ROOT/$host"
+    [[ -d "$project_path" ]] && { warn "Laravel project $project_path already exists."; return 1; }
     mkdir -p "$project_path"
     composer create-project --prefer-dist laravel/laravel "$project_path"
 }
 
 new_host() {
-    local host="$1"
-    local host_type="$2"
-
-    require_docker
-    ensure_jq
-    require_host "$host" "new-host"
-
-    local db_name
-    db_name=$(make_db_name "$host" "$host_type")
-
+    local host="$1" host_type="$2"
+    require_docker; ensure_jq; require_host "$host" "new-host"
+    local db_name; db_name=$(make_db_name "$host" "$host_type")
     case "$host_type" in
-        wp|wordpress)
-            scaffold_wordpress "$host"
-            ;;
-        laravel)
-            supervisor_generate_conf "$host"
-            scaffold_laravel "$host"
-            ;;
-        *)
-            die "Invalid type '$host_type'. Use: wp, wordpress, or laravel."
-            ;;
+        wp|wordpress) scaffold_wordpress "$host" ;;
+        laravel)      supervisor_generate_conf "$host"; scaffold_laravel "$host" ;;
+        *)            die "Invalid type '$host_type'. Use: wp, wordpress, or laravel." ;;
     esac
-
     hosts_json_add "$host" "$host_type" "$db_name"
     redirect_add "$host"
     build_webconf
 }
 
 remove_host() {
-    local host="$1"
-    require_host "$host" "remove-host"
-
-    local db_name
-    db_name=$(hosts_json_get_db "$host")
+    local host="$1"; require_host "$host" "remove-host"
+    local db_name; db_name=$(hosts_json_get_db "$host")
     [[ -n "$db_name" ]] && db_remove "$host"
-
     log "Removing $WEB_ROOT/$host"
     rm -rf "${WEB_ROOT:?}/$host"
-
     redirect_remove "$host"
     hosts_json_remove "$host"
     build_webconf
 }
 
 dc_build() {
-    local service="${1:-}"
-    local cache_flag="${2:-}"
-
+    local service="${1:-}" cache_flag="${2:-}"
     [[ "$cache_flag" == "--no-cache" ]] || cache_flag=""
-
     if [[ -z "$service" ]]; then
         log "Building all services..."
-        $DC build $cache_flag
-        $DC up -d --force-recreate
+        $DC build $cache_flag && $DC up -d --force-recreate
     else
         log "Building service: $service"
-        $DC build $cache_flag "$service"
-        $DC up -d --force-recreate "$service"
+        $DC build $cache_flag "$service" && $DC up -d --force-recreate "$service"
     fi
 }
 
 parse_new_host_args() {
-    HOST=""
-    TYPE="wp"
+    HOST="" ; TYPE="wp"
     while [[ $# -gt 0 ]]; do
-        case "$1" in
-            -t) TYPE="${2:-}"; shift 2 ;;
-            *)  HOST="$1"; shift ;;
-        esac
+        case "$1" in -t) TYPE="${2:-}"; shift 2 ;; *) HOST="$1"; shift ;; esac
     done
     require_host "$HOST" "new-host <hostname> -t <wp|laravel>"
 }
 
 show_help() {
     cat <<'EOF'
-web.sh - Docker-based PHP development environment manager
+web.sh - Docker PHP development environment
 
 Usage: web <command> [options]
 
 Environment:
-  up [service]                  Start all or specified Docker services
-  down                          Stop and remove all Docker services
-  stop [service]                Stop all or specified Docker services
-  restart [service]             Restart all or specified Docker services
-  build [service] [--no-cache]  Build all or specified Docker services
-  ps [service]                  Show Docker container status
-  log <service>                 View logs for a Docker service
+  up [service]                  Start Docker services
+  down                          Stop and remove services
+  stop [service]                Stop services
+  restart [service]             Restart services
+  build [service] [--no-cache]  Build services
+  ps [service]                  Container status
+  log <service>                 View service logs
 
-Host Management:
-  new-host <host> [-t wp|laravel]  Create new WordPress or Laravel site
-  remove-host <host>               Remove site, DB, SSL, and host entry
-  build-webconf                    Regenerate Caddy configs from web-hosts.json
+Hosts:
+  new-host <host> [-t type]     Create site (wp|laravel)
+  remove-host <host>            Remove site completely
+  build-webconf                 Regenerate Caddy configs
 
-Shell Access:
-  bash                          Access container Bash shell
-  fish                          Access container Fish shell
+Shell:
+  bash                          Container Bash
+  fish                          Container Fish
 
 SSL:
-  rootssl                       Generate root CA certificate
-  hostssl <host>                Generate SSL certificate for a host
-  import-rootca                 Import root CA to Chrome (Linux only)
+  rootssl                       Generate root CA
+  hostssl <host>                Generate host SSL
+  import-rootca                 Import root CA to Chrome
 
-Database & Caching:
-  redis-flush                   Flush Redis cache
-  redis-monitor                 Monitor Redis activity
-
-Debugging:
+Tools:
+  redis-flush                   Flush Redis
+  redis-monitor                 Monitor Redis
   debug <off|debug|profile>     Set Xdebug mode
-
-Supervisor:
-  supervisor-conf <host>        Generate Supervisor config for Laravel Horizon
-  supervisor-restart            Restart Supervisor service
-
-Utilities:
-  install                       Create symlinks for CLI and Fish completions
-  dir                           Print the script directory path
-  git-update <user> <theme> [plugin]  Update theme/plugin via git on lyntouch.com
-
-Examples:
-  web install                              Link web.sh to ~/.local/bin/web
-  web new-host example.test -t wp          Create a WordPress site
-  web new-host api.test -t laravel         Create a Laravel project
-  web remove-host example.test             Remove a site completely
-  web build                                Rebuild all Docker images
-  web build franken_php --no-cache         Rebuild PHP service without cache
-  web debug debug                          Enable Xdebug debugging
-  web rootssl                              Generate root CA certificate
-  web hostssl example.test                 Generate host SSL certificate
+  supervisor-conf <host>        Generate Supervisor config
+  supervisor-restart            Restart Supervisor
+  install                       Create CLI symlinks
+  dir                           Print script directory
+  git-update <user> <theme> [plugin]  Git pull on lyntouch.com
 EOF
 }
 
 main() {
-    local cmd="${1:-help}"
-    shift 2>/dev/null || true
-
+    local cmd="${1:-help}"; shift 2>/dev/null || true
     case "$cmd" in
-        up)       $DC up -d "$@" ;;
-        down)     $DC down ;;
-        stop)     $DC stop "$@" ;;
-        restart)
-            if [[ $# -eq 0 ]]; then
-                log "Restarting all containers"
-            else
-                log "Restarting container: $1"
-            fi
-            $DC restart "$@"
-            ;;
-        build)    dc_build "$@" ;;
-        ps)       $DC ps "$@" ;;
-        log)      $DC logs -f "$@" ;;
-
-        new-host)
-            parse_new_host_args "$@"
-            new_host "$HOST" "$TYPE"
-            ;;
-        remove-host)
-            parse_new_host_args "$@"
-            confirm "Are you sure you want to remove $HOST?" || exit 0
-            remove_host "$HOST"
-            ;;
-        build-webconf) build_webconf ;;
-
-        bash) $DC exec franken_php bash ;;
-        fish) $DC exec franken_php fish ;;
-
-        rootssl)
-            ssl_generate_root
-            $DC restart franken_php
-            ;;
-        hostssl)
-            require_host "${1:-}" "hostssl"
-            ssl_generate_host "$1"
-            ;;
-        import-rootca)
-            ssl_import_root_to_chrome "$ROOT_CRT"
-            ;;
-
-        redis-flush)   $DC exec redis redis-cli flushall ;;
-        redis-monitor) $DC exec redis redis-cli monitor ;;
-
-        debug)
-            local mode="${1:-}"
-            [[ -z "$mode" ]] && die "Usage: web debug <off|debug|profile>"
-            sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$mode/" "$SCRIPT_DIR/.env"
-            $DC up -d franken_php
-            ;;
-
+        up)               $DC up -d "$@" ;;
+        down)             $DC down ;;
+        stop)             $DC stop "$@" ;;
+        restart)          $DC restart "$@" ;;
+        build)            dc_build "$@" ;;
+        ps)               $DC ps "$@" ;;
+        log)              $DC logs -f "$@" ;;
+        new-host)         parse_new_host_args "$@"; new_host "$HOST" "$TYPE" ;;
+        remove-host)      parse_new_host_args "$@"; confirm "Remove $HOST?" && remove_host "$HOST" ;;
+        build-webconf)    build_webconf ;;
+        bash)             $DC exec franken_php bash ;;
+        fish)             $DC exec franken_php fish ;;
+        rootssl)          ssl_generate_root; $DC restart franken_php ;;
+        hostssl)          require_host "${1:-}" "hostssl"; ssl_generate_host "$1" ;;
+        import-rootca)    ssl_import_root_to_chrome "$ROOT_CRT" ;;
+        redis-flush)      $DC exec redis redis-cli flushall ;;
+        redis-monitor)    $DC exec redis redis-cli monitor ;;
+        debug)            [[ -z "${1:-}" ]] && die "Usage: web debug <off|debug|profile>"
+                          sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$1/" "$SCRIPT_DIR/.env"; $DC up -d franken_php ;;
         supervisor-conf)    supervisor_generate_conf "${1:-}" ;;
         supervisor-restart) supervisor_restart ;;
-
-        install)
-            ln -sf "$SCRIPT_DIR/web.sh" "$HOME/.local/bin/web"
-            ln -sf "$SCRIPT_DIR/web.completions.fish" "$HOME/.config/fish/completions/web.fish"
-            info "Symlinks created."
-            ;;
-        dir)
-            echo "$SCRIPT_DIR"
-            ;;
-        git-update)
-            local user="${1:-}" theme="${2:-}" plugin="${3:-lyntouch-modules}"
-            [[ -z "$theme" ]] && die "Usage: web git-update <user> <theme> [plugin]"
-            ssh "${user}@lyntouch.com" \
-                "git -C public_html/wp-content/plugins/${plugin} pull; git -C public_html/wp-content/themes/${theme} pull"
-            ;;
-
-        help|--help|-h|*) show_help ;;
+        install)          ln -sf "$SCRIPT_DIR/web.sh" "$HOME/.local/bin/web"
+                          ln -sf "$SCRIPT_DIR/web.completions.fish" "$HOME/.config/fish/completions/web.fish"
+                          info "Symlinks created." ;;
+        dir)              echo "$SCRIPT_DIR" ;;
+        git-update)       local user="${1:-}" theme="${2:-}" plugin="${3:-lyntouch-modules}"
+                          [[ -z "$theme" ]] && die "Usage: web git-update <user> <theme> [plugin]"
+                          ssh "${user}@lyntouch.com" "git -C public_html/wp-content/plugins/${plugin} pull; git -C public_html/wp-content/themes/${theme} pull" ;;
+        *)                show_help ;;
     esac
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
-    main "$@"
-fi
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi
