@@ -13,6 +13,7 @@ HOSTS_JSON="${HOSTS_JSON:-$SCRIPT_DIR/web-hosts.json}"
 CERTS_DIR="$BACKEND_CONFIG_DIR/ssl"
 ROOT_KEY="$CERTS_DIR/rootCA.key" ROOT_CRT="$CERTS_DIR/rootCA.crt"
 DC="docker compose -f $SCRIPT_DIR/docker-compose.yml"
+SUPERVISOR_DIR="${SUPERVISOR_DIR:-$HOME/supervisor}"
 KNOWN_SLDS="co.uk gov.uk com.br co.jp"
 _HOSTS_MODULE_PATH_CACHED="" _IS_WSL=""
 
@@ -275,11 +276,34 @@ build_webconf() {
     $DC restart franken_php
 }
 
+supervisor_init() {
+    [[ -f "$SUPERVISOR_DIR/supervisord.conf" ]] && return 0
+    mkdir -p "$SUPERVISOR_DIR"/{conf.d,logs}
+    cat > "$SUPERVISOR_DIR/supervisord.conf" <<-EOF
+	[unix_http_server]
+	file=$SUPERVISOR_DIR/supervisor.sock
+	
+	[supervisord]
+	logfile=$SUPERVISOR_DIR/logs/supervisord.log
+	pidfile=$SUPERVISOR_DIR/supervisord.pid
+	
+	[rpcinterface:supervisor]
+	supervisor.rpcinterface_factory = supervisor.xmlrpc:make_RPCInterface
+	
+	[supervisorctl]
+	serverurl=unix://$SUPERVISOR_DIR/supervisor.sock
+	
+	[include]
+	files = $SUPERVISOR_DIR/conf.d/*.conf
+	EOF
+    info "Supervisor initialized at $SUPERVISOR_DIR"
+}
+
 supervisor_generate_conf() {
     local host="$1"; require_host "$host" "supervisor-conf"
-    local hu="${host//./_}" outdir="${2:-/etc/supervisor/conf.d}" logdir="/tmp/supervisor-logs/$host"
-    sudo mkdir -p "$logdir"
-    sudo tee "$outdir/${hu}.conf" >/dev/null <<-EOF
+    supervisor_init
+    local hu="${host//./_}" outdir="${2:-$SUPERVISOR_DIR/conf.d}" logdir="$SUPERVISOR_DIR/logs"
+    cat > "$outdir/${hu}.conf" <<-EOF
 	[program:$hu]
 	process_name=%(program_name)s_%(process_num)02d
 	command=php $WEB_ROOT/$host/artisan horizon
@@ -287,19 +311,22 @@ supervisor_generate_conf() {
 	autorestart=true
 	stopasgroup=true
 	killasgroup=true
-	user=$USERNAME
 	numprocs=1
 	redirect_stderr=true
-	stdout_logfile=$logdir/worker.log
+	stdout_logfile=$logdir/${hu}.log
 	stopwaitsecs=3600
 	EOF
     info "Supervisor config generated at $outdir/${hu}.conf"
 }
 
 supervisor_restart() {
-    systemctl is-enabled --quiet supervisor || sudo systemctl enable --now supervisor
-    sudo systemctl restart supervisor
-    sudo supervisorctl restart all
+    supervisor_init
+    if [[ -f "$SUPERVISOR_DIR/supervisord.pid" ]] && kill -0 "$(cat "$SUPERVISOR_DIR/supervisord.pid")" 2>/dev/null; then
+        supervisorctl -c "$SUPERVISOR_DIR/supervisord.conf" reread
+        supervisorctl -c "$SUPERVISOR_DIR/supervisord.conf" update
+    else
+        supervisord -c "$SUPERVISOR_DIR/supervisord.conf"
+    fi
 }
 
 scaffold_wordpress() {
@@ -339,8 +366,7 @@ new_host() {
     require_docker; ensure_jq; require_host "$host" "new-host"
     case "$host_type" in
         wp|wordpress) scaffold_wordpress "$host" ;;
-        laravel)      scaffold_laravel "$host"
-                      [[ -d /etc/supervisor/conf.d ]] && supervisor_generate_conf "$host" ;;
+        laravel)      scaffold_laravel "$host"; supervisor_generate_conf "$host" ;;
         *)            die "Invalid type '$host_type'. Use: wp, wordpress, or laravel." ;;
     esac
     hosts_json_add "$host" "$host_type" "$(make_db_name "$host" "$host_type")"
@@ -407,8 +433,9 @@ Tools:
   redis-flush                   Flush Redis
   redis-monitor                 Monitor Redis
   debug <off|debug|profile>     Set Xdebug mode
+  supervisor-init                Initialize user-level Supervisor
   supervisor-conf <host>        Generate Supervisor config
-  supervisor-restart            Restart Supervisor
+  supervisor-restart            Start/reload Supervisor
   install                       Create CLI symlinks
   dir                           Print script directory
   git-update <user> <theme> [plugin]  Git pull on lyntouch.com
@@ -437,6 +464,7 @@ main() {
         redis-monitor)    $DC exec redis redis-cli monitor ;;
         debug)            [[ -z "${1:-}" ]] && die "Usage: web debug <off|debug|profile>"
                           sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$1/" "$SCRIPT_DIR/.env"; $DC up -d franken_php ;;
+        supervisor-init)  supervisor_init ;;
         supervisor-conf)    supervisor_generate_conf "${1:-}" ;;
         supervisor-restart) supervisor_restart ;;
         install)          ln -sf "$SCRIPT_DIR/web.sh" "$HOME/.local/bin/web"
