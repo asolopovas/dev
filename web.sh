@@ -171,23 +171,23 @@ db_create() {
     local db; db=$(hosts_json_get_db "$1")
     [[ -z "$db" ]] && die "No database configured for host $1"
     log "Creating database and user: $db"
-    $DC exec mariadb mariadb -uroot -psecret -e \
+    $DC exec -T mariadb mariadb -uroot -psecret -e \
         "CREATE USER IF NOT EXISTS '${db}'@'%' IDENTIFIED BY 'secret'; \
          CREATE DATABASE IF NOT EXISTS \`${db}\`; \
-         GRANT ALL PRIVILEGES ON \`${db}\`.* TO '${db}'@'%';"
+         GRANT ALL PRIVILEGES ON \`${db}\`.* TO '${db}'@'%';" </dev/null
 }
 
 db_remove() {
     local db; db=$(hosts_json_get_db "$1")
     [[ -z "$db" ]] && return 0
     log "Removing database and user: $db"
-    $DC exec mariadb mariadb -uroot -psecret -e \
-        "DROP DATABASE IF EXISTS \`${db}\`; DROP USER IF EXISTS '${db}'@'%';"
+    $DC exec -T mariadb mariadb -uroot -psecret -e \
+        "DROP DATABASE IF EXISTS \`${db}\`; DROP USER IF EXISTS '${db}'@'%';" </dev/null
 }
 
 db_exists() {
-    [[ -n "$($DC exec mariadb mariadb -uroot -psecret -Nse \
-        "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='$1'")" ]]
+    [[ -n "$($DC exec -T mariadb mariadb -uroot -psecret -Nse \
+        "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='$1'" </dev/null)" ]]
 }
 
 ssl_extfile() {
@@ -422,7 +422,7 @@ new_host() {
     hosts_json_add "$host" "$host_type" "$db_name"
     redirect_add "$host"
     build_webconf
-    [[ "$host_type" == "laravel" ]] && $DC exec franken_php php "/var/www/$host/artisan" migrate --force
+    [[ "$host_type" == "laravel" ]] && $DC exec -T franken_php php "/var/www/$host/artisan" migrate --force </dev/null
 }
 
 remove_host() {
