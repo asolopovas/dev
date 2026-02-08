@@ -156,6 +156,7 @@ dc_restart_live() {
     local -a frames=("-" "\\" "|" "/")
     local frame_idx=0
     local W_SERVICE=14 W_IMAGE=30 W_STATUS=34 W_PORTS=18
+    local cursor_hidden=0
 
     declare -A image_map status_map state_map health_map tcp_map udp_map icon_map row_offset has_udp_row
     local body_rows=0
@@ -271,6 +272,8 @@ dc_restart_live() {
     done
 
     _render_full_table
+    printf '\033[?25l'
+    cursor_hidden=1
 
     for svc in "${services[@]}"; do
         status_map["$svc"]="Restarting..."
@@ -305,6 +308,7 @@ dc_restart_live() {
     done
 
     # place cursor below the live table
+    ((cursor_hidden == 1)) && printf '\033[?25h'
     printf '\n'
 }
 
