@@ -134,12 +134,12 @@ dc_status_icon() {
 dc_status_icon_live() {
     local state="$1" health="$2"
     if [[ "$state" == "running" ]]; then
-        [[ "$health" == "healthy" || -z "$health" ]] && { printf '+'; return; }
-        printf '~'
+        [[ "$health" == "healthy" || -z "$health" ]] && { printf '\033[32m■\033[0m'; return; }
+        printf '\033[33m■\033[0m'
         return
     fi
-    [[ "$state" == "exited" || "$state" == "dead" ]] && { printf '!'; return; }
-    printf '?'
+    [[ "$state" == "exited" || "$state" == "dead" ]] && { printf '\033[31m■\033[0m'; return; }
+    printf '\033[37m■\033[0m'
 }
 
 dc_print_table() {
@@ -189,13 +189,24 @@ dc_restart_live() {
             "$W_PORTS" "$W_PORTS" "$c4"
     }
 
+    _print_service_row() {
+        local icon="$1" service="$2" c2="$3" c3="$4" c4="$5"
+        local name_width=$((W_SERVICE - 2))
+        ((name_width < 1)) && name_width=1
+        printf '│ %s %-*.*s │ %-*.*s │ %-*.*s │ %-*.*s │\n' \
+            "$icon" "$name_width" "$name_width" "$service" \
+            "$W_IMAGE" "$W_IMAGE" "$c2" \
+            "$W_STATUS" "$W_STATUS" "$c3" \
+            "$W_PORTS" "$W_PORTS" "$c4"
+    }
+
     _render_body() {
         local service primary_ports
         for service in "${services[@]}"; do
             primary_ports="-"
             [[ -n "${tcp_map[$service]}" ]] && primary_ports="tcp: ${tcp_map[$service]}"
             [[ -z "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]] && primary_ports="udp: ${udp_map[$service]}"
-            _print_row "${icon_map[$service]} ${service}" "${image_map[$service]}" "${status_map[$service]}" "$primary_ports"
+            _print_service_row "${icon_map[$service]}" "$service" "${image_map[$service]}" "${status_map[$service]}" "$primary_ports"
             if [[ -n "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]]; then
                 _print_row "" "" "" "udp: ${udp_map[$service]}"
             fi
@@ -227,8 +238,10 @@ dc_restart_live() {
         # then move back to the bottom anchor line.
         up=$((body_rows - row + 1))
         ((up > 0)) && printf '\033[%sA' "$up"
-        _print_row "${icon_map[$service]} ${service}" "${image_map[$service]}" "${status_map[$service]}" "$primary_ports"
+        printf '\r\033[2K'
+        _print_service_row "${icon_map[$service]}" "$service" "${image_map[$service]}" "${status_map[$service]}" "$primary_ports"
         if ((row_count == 2)); then
+            printf '\r\033[2K'
             _print_row "" "" "" "udp: ${udp_map[$service]}"
         fi
 
@@ -265,7 +278,8 @@ dc_restart_live() {
         local pid=$!
 
         while kill -0 "$pid" 2>/dev/null; do
-            icon_map["$svc"]="${frames[$((frame_idx % ${#frames[@]}))]}"
+            icon_map["$svc"]=$'\033[33m■\033[0m'
+            status_map["$svc"]="Restarting... ${frames[$((frame_idx % ${#frames[@]}))]}"
             frame_idx=$((frame_idx + 1))
             _refresh_service_rows "$svc"
             sleep 0.12
@@ -283,7 +297,7 @@ dc_restart_live() {
             udp_map["$svc"]="$udp_ports"
             icon_map["$svc"]=$(dc_status_icon_live "$state" "$health")
         else
-            icon_map["$svc"]="🔴"
+            icon_map["$svc"]=$'\033[31m■\033[0m'
             status_map["$svc"]="Restart failed"
         fi
 
