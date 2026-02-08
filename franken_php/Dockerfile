@@ -1,15 +1,13 @@
 FROM dunglas/frankenphp:1.7.0-builder-php8.3.22
 
-# ── Build args ────────────────────────────────────────────────────────
+# Build args
 ARG UID=1000
 ARG GID=1000
 ARG APP_USER=app
 ARG WORKDIR=/var/www
 
-# ── System packages + PHP extensions (single layer)
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
+# System packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
         # PHP extension build deps
         libavif-dev \
         libfreetype6-dev \
@@ -34,12 +32,13 @@ RUN set -eux; \
         sudo \
         unzip \
         wget \
-        xfonts-75dpi; \
-    # PHP core extensions
-    docker-php-ext-configure gd \
-        --with-freetype --with-jpeg --with-avif --with-webp; \
-    docker-php-ext-configure intl; \
-    docker-php-ext-install -j"$(nproc)" \
+        xfonts-75dpi
+
+# PHP core extensions
+RUN docker-php-ext-configure gd \
+        --with-freetype --with-jpeg --with-avif --with-webp \
+    && docker-php-ext-configure intl \
+    && docker-php-ext-install -j"$(nproc)" \
         bcmath \
         calendar \
         exif \
@@ -53,22 +52,21 @@ RUN set -eux; \
         pdo_sqlite \
         pcntl \
         xml \
-        zip; \
-    # PECL extensions
-    pecl install apcu igbinary imagick redis xdebug; \
-    docker-php-ext-enable apcu igbinary imagick redis xdebug; \
-    # wkhtmltopdf
-    ARCH="$(dpkg --print-architecture)"; \
-    wget -q "https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.bookworm_${ARCH}.deb" \
-        -O /tmp/wkhtmltox.deb; \
-    dpkg -i /tmp/wkhtmltox.deb || apt-get install -f -y --no-install-recommends; \
-    # Cleanup
-    rm -f /tmp/wkhtmltox.deb; \
-    pecl clear-cache; \
-    apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
-    rm -rf /tmp/*
+        zip
 
-# ── User configuration
+# PECL extensions
+RUN pecl install apcu igbinary imagick redis xdebug \
+    && docker-php-ext-enable apcu igbinary imagick redis xdebug \
+    && pecl clear-cache
+
+# wkhtmltopdf
+RUN ARCH="$(dpkg --print-architecture)" \
+    && wget -q "https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.bookworm_${ARCH}.deb" \
+        -O /tmp/wkhtmltox.deb \
+    && (dpkg -i /tmp/wkhtmltox.deb || apt-get install -f -y --no-install-recommends) \
+    && rm -f /tmp/wkhtmltox.deb
+
+# User configuration
 RUN set -eux; \
     groupadd -g "${GID}" "${APP_USER}" || true; \
     useradd -m -u "${UID}" -g "${GID}" -s /bin/bash "${APP_USER}"; \
@@ -79,7 +77,7 @@ RUN set -eux; \
     chmod 0440 "/etc/sudoers.d/${APP_USER}"; \
     echo "Set disable_coredump false" > /etc/sudo.conf
 
-# ── Environment
+# Environment
 ENV APP_USER=${APP_USER} \
     VOLTA_HOME=/home/${APP_USER}/.volta \
     XDG_DATA_HOME=/home/${APP_USER}/.local/share \
@@ -88,20 +86,20 @@ ENV APP_USER=${APP_USER} \
     WORKDIR=${WORKDIR}
 ENV PATH=${VOLTA_HOME}/bin:/home/${APP_USER}/.local/bin:${PATH}
 
-# ── Config files (before switching user for correct ownership)
+# Config files (before switching user for correct ownership)
 COPY conf.d/  /usr/local/etc/php/conf.d/
 COPY php-env.sh entrypoint.sh /usr/local/bin/
 
-# ── Switch to non-root user
+# Switch to non-root user
 USER ${UID}:${GID}
 
-# ── User-space tool versions (declared here to preserve layer cache) ──
+# User-space tool versions (declared here to preserve layer cache)
 ARG NODE_VERSION=24.13.0
 ARG NPM_VERSION=11.7
 ARG FD_VERSION=10.3.0
 ARG FZF_VERSION=0.67.0
 
-# ── User-space tools ──────────────────────────────────────────────────
+# User-space tools
 RUN mkdir -p "$HOME/.local/bin" && touch "$HOME/.env-vars"
 
 # Volta + Node
