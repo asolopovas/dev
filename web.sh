@@ -41,6 +41,84 @@ confirm()       { ensure_gum && gum confirm "$1"; }
 select_option() { local prompt="$1"; shift; ensure_gum && gum choose --header="$prompt" "$@"; }
 prompt_input()  { ensure_gum && gum input --prompt="$1: " --value="${2:-}"; }
 
+dc_action() {
+    local action="$1"; shift
+    local services=("$@")
+    local action_label spin_label
+
+    case "$action" in
+        up)      action_label="Starting"  ; spin_label="Starting services..."  ;;
+        down)    action_label="Stopping"  ; spin_label="Stopping services..."  ;;
+        stop)    action_label="Stopping"  ; spin_label="Stopping services..."  ;;
+        restart) action_label="Restarting"; spin_label="Restarting services..." ;;
+        *)       action_label="Running"   ; spin_label="Running $action..."    ;;
+    esac
+
+    # resolve which services are targeted
+    if [[ ${#services[@]} -eq 0 ]]; then
+        mapfile -t services < <($DC config --services 2>/dev/null)
+    fi
+
+    # display the service list
+    if _has_gum; then
+        local svc_list=""
+        for svc in "${services[@]}"; do svc_list+="  • $svc"$'\n'; done
+        gum style --bold --foreground 212 "$action_label:"
+        printf '%s' "$svc_list"
+    else
+        log "$action_label: ${services[*]}"
+    fi
+
+    # run the docker compose command
+    case "$action" in
+        up)   spin "$spin_label" $DC up -d "${services[@]}" ;;
+        down) spin "$spin_label" $DC down ;;
+        *)    spin "$spin_label" $DC "$action" "${services[@]}" ;;
+    esac
+
+    # show status after the action (except down which removes containers)
+    if [[ "$action" != "down" ]]; then
+        echo ""
+        dc_ps "${services[@]}"
+    fi
+}
+
+dc_ps() {
+    if ! _has_gum; then $DC ps "$@"; return; fi
+
+    local json_lines
+    json_lines=$($DC ps --format json "$@" 2>/dev/null) || { $DC ps "$@"; return; }
+    [[ -z "$json_lines" ]] && { info "No containers running."; return; }
+
+    local SEP=$'\t' table_rows=""
+    while IFS= read -r line; do
+        local svc state health status image ports indicator
+        svc=$(echo "$line" | jq -r '.Service')
+        state=$(echo "$line" | jq -r '.State')
+        health=$(echo "$line" | jq -r '.Health // ""')
+        status=$(echo "$line" | jq -r '.Status')
+        image=$(echo "$line" | jq -r '.Image')
+        ports=$(echo "$line" | jq -r \
+            '[.Publishers[] | select(.URL == "0.0.0.0" and .PublishedPort > 0) | "\(.PublishedPort)/\(.Protocol)"] | unique | join(", ")')
+
+        if [[ "$state" == "running" ]]; then
+            if [[ "$health" == "healthy" || -z "$health" ]]; then indicator="🟢"; else indicator="🟡"; fi
+        elif [[ "$state" == "exited" || "$state" == "dead" ]]; then
+            indicator="🔴"
+        else
+            indicator="⚪"
+        fi
+
+        table_rows+="${indicator} ${svc}${SEP}${image}${SEP}${status}${SEP}${ports}"$'\n'
+    done <<< "$json_lines"
+
+    printf '%s\n' "SERVICE${SEP}IMAGE${SEP}STATUS${SEP}PORTS" | cat - <(printf '%s' "$table_rows") \
+        | gum table --print --separator "$SEP" --border rounded \
+            --border.foreground 240 \
+            --header.foreground 39 \
+            --padding "0 1"
+}
+
 new_host_wizard() {
     HOST=$(prompt_input "Hostname" "")
     TYPE=$(select_option "Site type:" "wp" "laravel")
@@ -495,12 +573,12 @@ EOF
 main() {
     local cmd="${1:-help}"; shift 2>/dev/null || true
     case "$cmd" in
-        up)               spin "Starting services..." $DC up -d "$@" ;;
-        down)             spin "Stopping services..." $DC down ;;
-        stop)             spin "Stopping services..." $DC stop "$@" ;;
-        restart)          spin "Restarting services..." $DC restart "$@" ;;
+        up)               dc_action up "$@" ;;
+        down)             dc_action down ;;
+        stop)             dc_action stop "$@" ;;
+        restart)          dc_action restart "$@" ;;
         build)            dc_build "$@" ;;
-        ps)               $DC ps "$@" ;;
+        ps)               dc_ps "$@" ;;
         log)              $DC logs -f "$@" ;;
         new-host)         if [[ $# -eq 0 ]]; then new_host_wizard
                           else parse_new_host_args "$@"; new_host "$HOST" "$TYPE"; fi ;;
