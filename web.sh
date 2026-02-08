@@ -92,14 +92,26 @@ dc_ps() {
 
     local SEP=$'\t' table_rows=""
     while IFS= read -r line; do
-        local svc state health status image ports indicator
+        local svc state health status image ports tcp_ports udp_ports indicator
         svc=$(echo "$line" | jq -r '.Service')
         state=$(echo "$line" | jq -r '.State')
         health=$(echo "$line" | jq -r '.Health // ""')
         status=$(echo "$line" | jq -r '.Status')
         image=$(echo "$line" | jq -r '.Image')
-        ports=$(echo "$line" | jq -r \
-            '[.Publishers[] | select(.URL == "0.0.0.0" and .PublishedPort > 0) | "\(.PublishedPort)/\(.Protocol)"] | unique | join(", ")')
+        tcp_ports=$(echo "$line" | jq -r \
+            '[.Publishers[] | select(.URL == "0.0.0.0" and .PublishedPort > 0 and .Protocol == "tcp") | .PublishedPort] | unique | sort | map(tostring) | join(",")')
+        udp_ports=$(echo "$line" | jq -r \
+            '[.Publishers[] | select(.URL == "0.0.0.0" and .PublishedPort > 0 and .Protocol == "udp") | .PublishedPort] | unique | sort | map(tostring) | join(",")')
+
+        if [[ -n "$tcp_ports" && -n "$udp_ports" ]]; then
+            ports="tcp: $tcp_ports | udp: $udp_ports"
+        elif [[ -n "$tcp_ports" ]]; then
+            ports="tcp: $tcp_ports"
+        elif [[ -n "$udp_ports" ]]; then
+            ports="udp: $udp_ports"
+        else
+            ports="-"
+        fi
 
         if [[ "$state" == "running" ]]; then
             if [[ "$health" == "healthy" || -z "$health" ]]; then indicator="🟢"; else indicator="🟡"; fi
