@@ -238,10 +238,10 @@ dc_restart_live() {
         # then move back to the bottom anchor line.
         up=$((body_rows - row + 1))
         ((up > 0)) && printf '\033[%sA' "$up"
-        printf '\r\033[2K'
+        printf '\r'
         _print_service_row "${icon_map[$service]}" "$service" "${image_map[$service]}" "${status_map[$service]}" "$primary_ports"
         if ((row_count == 2)); then
-            printf '\r\033[2K'
+            printf '\r'
             _print_row "" "" "" "udp: ${udp_map[$service]}"
         fi
 
