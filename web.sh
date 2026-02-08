@@ -26,6 +26,14 @@ require_cmd()    { command -v "$1" &>/dev/null || die "$1 is not installed."; }
 require_host()   { [[ -n "${1:-}" ]] || die "No hostname specified. Usage: web $2 <hostname>"; }
 require_docker() { require_cmd docker; docker info &>/dev/null || die "Docker daemon is not running."; }
 ensure_jq()      { command -v jq &>/dev/null || { log "Installing jq..."; sudo apt update && sudo apt install -y jq; }; }
+ensure_gum() {
+    command -v gum &>/dev/null && return 0
+    confirm "gum is not installed. Install it now?" || die "gum is required for interactive selection."
+    sudo mkdir -p /etc/apt/keyrings
+    curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
+    sudo apt update && sudo apt install -y gum
+}
 
 confirm() {
     local reply
@@ -435,6 +443,29 @@ remove_host() {
     rm -f "$SUPERVISOR_DIR/conf.d/${hu}.conf"
     redirect_remove "$host"
     hosts_json_remove "$host"
+}
+
+remove_host_interactive() {
+    ensure_gum
+    local hosts
+    hosts=$(hosts_json_query -r '.hosts[].name' 2>/dev/null)
+    [[ -z "$hosts" ]] && die "No hosts configured."
+
+    local selected
+    selected=$(printf '%s\n' "$hosts" | gum choose --no-limit --header="Select hosts to remove (space to toggle, enter to confirm)") \
+        || { warn "No hosts selected."; return 1; }
+    [[ -z "$selected" ]] && { warn "No hosts selected."; return 1; }
+
+    echo ""
+    log "The following hosts will be removed:"
+    printf '  - %s\n' $selected
+    echo ""
+    confirm "Proceed with removal?" || { warn "Aborted."; return 1; }
+
+    local host
+    while IFS= read -r host; do
+        [[ -n "$host" ]] && remove_host "$host"
+    done <<< "$selected"
     build_webconf
 }
 
@@ -470,7 +501,7 @@ Environment:
 
 Hosts:
   new-host [host] [-t type]     Create site (interactive wizard or flags)
-  remove-host <host>            Remove site completely
+  remove-host [host]            Remove site (interactive multi-select or by name)
   build-webconf                 Regenerate Caddy configs
 
 Shell:
@@ -507,7 +538,8 @@ main() {
         log)              $DC logs -f "$@" ;;
         new-host)         if [[ $# -eq 0 ]]; then new_host_wizard
                           else parse_new_host_args "$@"; new_host "$HOST" "$TYPE"; fi ;;
-        remove-host)      parse_new_host_args "$@"; confirm "Remove $HOST?" && remove_host "$HOST" ;;
+        remove-host)      if [[ $# -eq 0 ]]; then remove_host_interactive
+                          else parse_new_host_args "$@"; confirm "Remove $HOST?" && { remove_host "$HOST"; build_webconf; }; fi ;;
         build-webconf)    build_webconf ;;
         bash)             $DC exec franken_php bash ;;
         fish)             $DC exec franken_php fish ;;
