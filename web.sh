@@ -59,8 +59,10 @@ dc_action() {
         mapfile -t services < <($DC config --services 2>/dev/null)
     fi
 
-    # display the service list
-    if _has_gum; then
+    # display the service list (restart with gum uses the live table instead)
+    if _has_gum && [[ "$action" == "restart" ]]; then
+        :
+    elif _has_gum; then
         local svc_list=""
         for svc in "${services[@]}"; do svc_list+="  • $svc"$'\n'; done
         gum style --bold --foreground 212 "$action_label:"
@@ -71,16 +73,225 @@ dc_action() {
 
     # run the docker compose command
     case "$action" in
+        restart)
+            if _has_gum; then
+                dc_restart_live "${services[@]}"
+            else
+                spin "$spin_label" $DC restart "${services[@]}"
+            fi
+            ;;
         up)   spin "$spin_label" $DC up -d "${services[@]}" ;;
         down) spin "$spin_label" $DC down ;;
         *)    spin "$spin_label" $DC "$action" "${services[@]}" ;;
     esac
 
-    # show status after the action (except down which removes containers)
+    # show status after the action (except down and live restart which already renders status)
     if [[ "$action" != "down" ]]; then
-        echo ""
-        dc_ps "${services[@]}"
+        if ! { [[ "$action" == "restart" ]] && _has_gum; }; then
+            echo ""
+            dc_ps "${services[@]}"
+        fi
     fi
+}
+
+dc_service_snapshot() {
+    local svc="$1"
+    local FS=$'\x1f'
+    local line=""
+    while IFS= read -r l; do
+        line="$l"
+        break
+    done < <($DC ps --format json "$svc" 2>/dev/null)
+
+    if [[ -z "$line" ]]; then
+        printf '%s%s%s%s%s%s%s%s%s%s%s\n' "-" "$FS" "not running" "$FS" "" "$FS" "" "$FS" "" "$FS" ""
+        return
+    fi
+
+    local image state health status tcp_ports udp_ports
+    image=$(echo "$line" | jq -r '.Image // "-"')
+    state=$(echo "$line" | jq -r '.State // "unknown"')
+    health=$(echo "$line" | jq -r '.Health // ""')
+    status=$(echo "$line" | jq -r '.Status // "-"')
+    tcp_ports=$(echo "$line" | jq -r \
+        '[.Publishers[] | select(.URL == "0.0.0.0" and .PublishedPort > 0 and .Protocol == "tcp") | .PublishedPort] | unique | sort | map(tostring) | join(",")')
+    udp_ports=$(echo "$line" | jq -r \
+        '[.Publishers[] | select(.URL == "0.0.0.0" and .PublishedPort > 0 and .Protocol == "udp") | .PublishedPort] | unique | sort | map(tostring) | join(",")')
+    printf '%s%s%s%s%s%s%s%s%s%s%s\n' "$image" "$FS" "$status" "$FS" "$state" "$FS" "$health" "$FS" "$tcp_ports" "$FS" "$udp_ports"
+}
+
+dc_status_icon() {
+    local state="$1" health="$2"
+    if [[ "$state" == "running" ]]; then
+        [[ "$health" == "healthy" || -z "$health" ]] && { printf '🟢'; return; }
+        printf '🟡'
+        return
+    fi
+    [[ "$state" == "exited" || "$state" == "dead" ]] && { printf '🔴'; return; }
+    printf '⚪'
+}
+
+dc_status_icon_live() {
+    local state="$1" health="$2"
+    if [[ "$state" == "running" ]]; then
+        [[ "$health" == "healthy" || -z "$health" ]] && { printf '+'; return; }
+        printf '~'
+        return
+    fi
+    [[ "$state" == "exited" || "$state" == "dead" ]] && { printf '!'; return; }
+    printf '?'
+}
+
+dc_print_table() {
+    local rows="$1" SEP=$'\t'
+    printf '%s\n' "SERVICE${SEP}IMAGE${SEP}STATUS${SEP}PORTS" | cat - <(printf '%s' "$rows") \
+        | gum table --print --separator "$SEP" --border rounded \
+            --border.foreground 240 \
+            --header.foreground 39 \
+            --padding "0 1"
+}
+
+dc_restart_live() {
+    local services=("$@")
+    local -a frames=("-" "\\" "|" "/")
+    local frame_idx=0
+    local W_SERVICE=14 W_IMAGE=30 W_STATUS=34 W_PORTS=18
+
+    declare -A image_map status_map state_map health_map tcp_map udp_map icon_map row_offset has_udp_row
+    local body_rows=0
+
+    _repeat_char() {
+        local ch="$1" n="$2" out=""
+        local i
+        for ((i = 0; i < n; i++)); do out+="$ch"; done
+        printf '%s' "$out"
+    }
+
+    _draw_border() {
+        local left="$1" mid="$2" right="$3"
+        printf '%s' "$left"
+        printf '%s' "$(_repeat_char '─' $((W_SERVICE + 2)))"
+        printf '%s' "$mid"
+        printf '%s' "$(_repeat_char '─' $((W_IMAGE + 2)))"
+        printf '%s' "$mid"
+        printf '%s' "$(_repeat_char '─' $((W_STATUS + 2)))"
+        printf '%s' "$mid"
+        printf '%s' "$(_repeat_char '─' $((W_PORTS + 2)))"
+        printf '%s\n' "$right"
+    }
+
+    _print_row() {
+        local c1="$1" c2="$2" c3="$3" c4="$4"
+        printf '│ %-*.*s │ %-*.*s │ %-*.*s │ %-*.*s │\n' \
+            "$W_SERVICE" "$W_SERVICE" "$c1" \
+            "$W_IMAGE" "$W_IMAGE" "$c2" \
+            "$W_STATUS" "$W_STATUS" "$c3" \
+            "$W_PORTS" "$W_PORTS" "$c4"
+    }
+
+    _render_body() {
+        local service primary_ports
+        for service in "${services[@]}"; do
+            primary_ports="-"
+            [[ -n "${tcp_map[$service]}" ]] && primary_ports="tcp: ${tcp_map[$service]}"
+            [[ -z "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]] && primary_ports="udp: ${udp_map[$service]}"
+            _print_row "${icon_map[$service]} ${service}" "${image_map[$service]}" "${status_map[$service]}" "$primary_ports"
+            if [[ -n "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]]; then
+                _print_row "" "" "" "udp: ${udp_map[$service]}"
+            fi
+        done
+    }
+
+    _render_full_table() {
+        printf 'Restarting services (live):\n'
+        _draw_border "╭" "┬" "╮"
+        _print_row "SERVICE" "IMAGE" "STATUS" "PORTS"
+        _draw_border "├" "┼" "┤"
+        _render_body
+        _draw_border "╰" "┴" "╯"
+    }
+
+    _refresh_service_rows() {
+        local service="$1"
+        local row="${row_offset[$service]}"
+        local row_count=1
+        local up down
+        local primary_ports="-"
+
+        [[ -n "${tcp_map[$service]}" ]] && primary_ports="tcp: ${tcp_map[$service]}"
+        [[ -z "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]] && primary_ports="udp: ${udp_map[$service]}"
+
+        [[ "${has_udp_row[$service]}" == "1" ]] && row_count=2
+
+        # cursor is kept at the line below the full table; move to target row, redraw,
+        # then move back to the bottom anchor line.
+        up=$((body_rows - row + 1))
+        ((up > 0)) && printf '\033[%sA' "$up"
+        _print_row "${icon_map[$service]} ${service}" "${image_map[$service]}" "${status_map[$service]}" "$primary_ports"
+        if ((row_count == 2)); then
+            _print_row "" "" "" "udp: ${udp_map[$service]}"
+        fi
+
+        down=$((body_rows - row - row_count + 1))
+        ((down > 0)) && printf '\033[%sB' "$down"
+    }
+
+    local svc
+    for svc in "${services[@]}"; do
+        local snap image status state health tcp_ports udp_ports
+        snap=$(dc_service_snapshot "$svc")
+        IFS=$'\x1f' read -r image status state health tcp_ports udp_ports <<< "$snap"
+        image_map["$svc"]="$image"
+        status_map["$svc"]="$status"
+        state_map["$svc"]="$state"
+        health_map["$svc"]="$health"
+        tcp_map["$svc"]="$tcp_ports"
+        udp_map["$svc"]="$udp_ports"
+        icon_map["$svc"]=$(dc_status_icon_live "$state" "$health")
+        row_offset["$svc"]="$body_rows"
+        has_udp_row["$svc"]=0
+        ((body_rows += 1))
+        if [[ -n "$tcp_ports" && -n "$udp_ports" ]]; then
+            has_udp_row["$svc"]=1
+            ((body_rows += 1))
+        fi
+    done
+
+    _render_full_table
+
+    for svc in "${services[@]}"; do
+        status_map["$svc"]="Restarting..."
+        $DC restart "$svc" >/dev/null 2>&1 &
+        local pid=$!
+
+        while kill -0 "$pid" 2>/dev/null; do
+            icon_map["$svc"]="${frames[$((frame_idx % ${#frames[@]}))]}"
+            frame_idx=$((frame_idx + 1))
+            _refresh_service_rows "$svc"
+            sleep 0.12
+        done
+
+        if wait "$pid"; then
+            local snap image status state health tcp_ports udp_ports
+            snap=$(dc_service_snapshot "$svc")
+            IFS=$'\x1f' read -r image status state health tcp_ports udp_ports <<< "$snap"
+            image_map["$svc"]="$image"
+            status_map["$svc"]="$status"
+            state_map["$svc"]="$state"
+            health_map["$svc"]="$health"
+            tcp_map["$svc"]="$tcp_ports"
+            udp_map["$svc"]="$udp_ports"
+            icon_map["$svc"]=$(dc_status_icon_live "$state" "$health")
+        else
+            icon_map["$svc"]="🔴"
+            status_map["$svc"]="Restart failed"
+        fi
+
+        _refresh_service_rows "$svc"
+    done
+
+    # place cursor below the live table
+    printf '\n'
 }
 
 dc_ps() {
@@ -92,7 +303,7 @@ dc_ps() {
 
     local SEP=$'\t' table_rows=""
     while IFS= read -r line; do
-        local svc state health status image ports tcp_ports udp_ports indicator
+        local svc state health status image indicator tcp_ports udp_ports primary_ports
         svc=$(echo "$line" | jq -r '.Service')
         state=$(echo "$line" | jq -r '.State')
         health=$(echo "$line" | jq -r '.Health // ""')
@@ -103,14 +314,12 @@ dc_ps() {
         udp_ports=$(echo "$line" | jq -r \
             '[.Publishers[] | select(.URL == "0.0.0.0" and .PublishedPort > 0 and .Protocol == "udp") | .PublishedPort] | unique | sort | map(tostring) | join(",")')
 
-        if [[ -n "$tcp_ports" && -n "$udp_ports" ]]; then
-            ports="tcp: $tcp_ports | udp: $udp_ports"
-        elif [[ -n "$tcp_ports" ]]; then
-            ports="tcp: $tcp_ports"
+        if [[ -n "$tcp_ports" ]]; then
+            primary_ports="tcp: $tcp_ports"
         elif [[ -n "$udp_ports" ]]; then
-            ports="udp: $udp_ports"
+            primary_ports="udp: $udp_ports"
         else
-            ports="-"
+            primary_ports="-"
         fi
 
         if [[ "$state" == "running" ]]; then
@@ -121,14 +330,13 @@ dc_ps() {
             indicator="⚪"
         fi
 
-        table_rows+="${indicator} ${svc}${SEP}${image}${SEP}${status}${SEP}${ports}"$'\n'
+        table_rows+="${indicator} ${svc}${SEP}${image}${SEP}${status}${SEP}${primary_ports}"$'\n'
+        if [[ -n "$tcp_ports" && -n "$udp_ports" ]]; then
+            table_rows+="${SEP}${SEP}${SEP}udp: ${udp_ports}"$'\n'
+        fi
     done <<< "$json_lines"
 
-    printf '%s\n' "SERVICE${SEP}IMAGE${SEP}STATUS${SEP}PORTS" | cat - <(printf '%s' "$table_rows") \
-        | gum table --print --separator "$SEP" --border rounded \
-            --border.foreground 240 \
-            --header.foreground 39 \
-            --padding "0 1"
+    dc_print_table "$table_rows"
 }
 
 new_host_wizard() {
