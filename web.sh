@@ -155,10 +155,10 @@ dc_restart_live() {
     local services=("$@")
     local -a frames=("-" "\\" "|" "/")
     local frame_idx=0
-    local W_SERVICE=14 W_IMAGE=30 W_STATUS=34 W_PORTS=18
+    local W_SERVICE=14 W_IMAGE=30 W_STATUS=24 W_PORTS=18
     local cursor_hidden=0
 
-    declare -A image_map status_map state_map health_map tcp_map udp_map icon_map row_offset has_udp_row
+    declare -A image_map status_map state_map health_map tcp_map udp_map icon_map row_offset has_udp_row has_status_row
     local body_rows=0
 
     _repeat_char() {
@@ -201,13 +201,42 @@ dc_restart_live() {
             "$W_PORTS" "$W_PORTS" "$c4"
     }
 
+    _wrap_status_two_lines() {
+        local status="$1"
+        local -n out1_ref="$2"
+        local -n out2_ref="$3"
+        local head tail
+
+        out1_ref="$status"
+        out2_ref=""
+
+        ((${#status} <= W_STATUS)) && return
+
+        head="${status:0:W_STATUS}"
+        tail="${status:W_STATUS}"
+
+        if [[ "$head" == *" "* ]]; then
+            out1_ref="${head% *}"
+            tail="${status:${#out1_ref}}"
+            tail="${tail# }"
+        else
+            out1_ref="$head"
+        fi
+
+        out2_ref="${tail:0:W_STATUS}"
+    }
+
     _render_body() {
-        local service primary_ports
+        local service primary_ports status_line_1 status_line_2
         for service in "${services[@]}"; do
             primary_ports="-"
             [[ -n "${tcp_map[$service]}" ]] && primary_ports="tcp: ${tcp_map[$service]}"
             [[ -z "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]] && primary_ports="udp: ${udp_map[$service]}"
-            _print_service_row "${icon_map[$service]}" "$service" "${image_map[$service]}" "${status_map[$service]}" "$primary_ports"
+            _wrap_status_two_lines "${status_map[$service]}" status_line_1 status_line_2
+            _print_service_row "${icon_map[$service]}" "$service" "${image_map[$service]}" "$status_line_1" "$primary_ports"
+            if [[ "${has_status_row[$service]}" == "1" ]]; then
+                _print_row "" "" "$status_line_2" ""
+            fi
             if [[ -n "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]]; then
                 _print_row "" "" "" "udp: ${udp_map[$service]}"
             fi
@@ -229,19 +258,27 @@ dc_restart_live() {
         local row_count=1
         local up down
         local primary_ports="-"
+        local status_line_1 status_line_2
 
         [[ -n "${tcp_map[$service]}" ]] && primary_ports="tcp: ${tcp_map[$service]}"
         [[ -z "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]] && primary_ports="udp: ${udp_map[$service]}"
+        _wrap_status_two_lines "${status_map[$service]}" status_line_1 status_line_2
 
+        [[ "${has_status_row[$service]}" == "1" ]] && ((row_count += 1))
         [[ "${has_udp_row[$service]}" == "1" ]] && row_count=2
+        [[ "${has_status_row[$service]}" == "1" && "${has_udp_row[$service]}" == "1" ]] && row_count=3
 
         # cursor is kept at the line below the full table; move to target row, redraw,
         # then move back to the bottom anchor line.
         up=$((body_rows - row + 1))
         ((up > 0)) && printf '\033[%sA' "$up"
         printf '\r'
-        _print_service_row "${icon_map[$service]}" "$service" "${image_map[$service]}" "${status_map[$service]}" "$primary_ports"
-        if ((row_count == 2)); then
+        _print_service_row "${icon_map[$service]}" "$service" "${image_map[$service]}" "$status_line_1" "$primary_ports"
+        if [[ "${has_status_row[$service]}" == "1" ]]; then
+            printf '\r'
+            _print_row "" "" "$status_line_2" ""
+        fi
+        if [[ "${has_udp_row[$service]}" == "1" ]]; then
             printf '\r'
             _print_row "" "" "" "udp: ${udp_map[$service]}"
         fi
@@ -263,8 +300,11 @@ dc_restart_live() {
         udp_map["$svc"]="$udp_ports"
         icon_map["$svc"]=$(dc_status_icon_live "$state" "$health")
         row_offset["$svc"]="$body_rows"
+        has_status_row["$svc"]=0
+        ((${#status} > W_STATUS)) && has_status_row["$svc"]=1
         has_udp_row["$svc"]=0
         ((body_rows += 1))
+        [[ "${has_status_row[$svc]}" == "1" ]] && ((body_rows += 1))
         if [[ -n "$tcp_ports" && -n "$udp_ports" ]]; then
             has_udp_row["$svc"]=1
             ((body_rows += 1))
