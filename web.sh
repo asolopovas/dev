@@ -136,7 +136,7 @@ dc_live_action() {
     local services=("$@")
     local -a frames=("-" "\\" "|" "/")
     local frame_idx=0
-    local W_SERVICE=14 W_IMAGE=30 W_STATUS=24 W_PORTS=32
+    local W_SERVICE=14 W_IMAGE=30 W_STATUS=24 W_PORTS=24
     local cursor_hidden=0
     local action_label progress_label fail_label
 
@@ -680,17 +680,17 @@ supervisor_init() {
     cat > "$SUPERVISOR_DIR/supervisord.conf" <<-EOF
 	[unix_http_server]
 	file=$SUPERVISOR_DIR/supervisor.sock
-	
+
 	[supervisord]
 	logfile=$SUPERVISOR_DIR/logs/supervisord.log
 	pidfile=$SUPERVISOR_DIR/supervisord.pid
-	
+
 	[rpcinterface:supervisor]
 	supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
-	
+
 	[supervisorctl]
 	serverurl=unix://$SUPERVISOR_DIR/supervisor.sock
-	
+
 	[include]
 	files = $SUPERVISOR_DIR/conf.d/*.conf
 	EOF
