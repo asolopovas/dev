@@ -114,9 +114,9 @@ dc_service_snapshot() {
     health=$(echo "$line" | jq -r '.Health // ""')
     status=$(echo "$line" | jq -r '.Status // "-"')
     tcp_ports=$(echo "$line" | jq -r \
-        '[.Publishers[] | select(.URL == "0.0.0.0" and .PublishedPort > 0 and .Protocol == "tcp") | .PublishedPort] | unique | sort | map(tostring) | join(",")')
+        '[.Publishers[]? | select(.PublishedPort > 0 and .Protocol == "tcp") | .PublishedPort] | unique | sort | map(tostring) | join(",")')
     udp_ports=$(echo "$line" | jq -r \
-        '[.Publishers[] | select(.URL == "0.0.0.0" and .PublishedPort > 0 and .Protocol == "udp") | .PublishedPort] | unique | sort | map(tostring) | join(",")')
+        '[.Publishers[]? | select(.PublishedPort > 0 and .Protocol == "udp") | .PublishedPort] | unique | sort | map(tostring) | join(",")')
     printf '%s%s%s%s%s%s%s%s%s%s%s\n' "$image" "$FS" "$status" "$FS" "$state" "$FS" "$health" "$FS" "$tcp_ports" "$FS" "$udp_ports"
 }
 
@@ -136,7 +136,7 @@ dc_live_action() {
     local services=("$@")
     local -a frames=("-" "\\" "|" "/")
     local frame_idx=0
-    local W_SERVICE=14 W_IMAGE=30 W_STATUS=24 W_PORTS=18
+    local W_SERVICE=14 W_IMAGE=30 W_STATUS=24 W_PORTS=38
     local cursor_hidden=0
     local action_label progress_label fail_label
 
@@ -148,7 +148,7 @@ dc_live_action() {
         *)       action_label="Running"   ; progress_label="Running..."    ; fail_label="Action failed" ;;
     esac
 
-    declare -A image_map status_map state_map health_map tcp_map udp_map icon_map row_offset has_udp_row has_status_row
+    declare -A image_map status_map state_map health_map tcp_map udp_map icon_map row_offset has_status_row
     local body_rows=0
 
     _repeat_char() {
@@ -216,19 +216,27 @@ dc_live_action() {
         out2_ref="${tail:0:W_STATUS}"
     }
 
+    _format_ports_text() {
+        local service="$1"
+        local ports="-"
+        if [[ -n "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]]; then
+            ports="tcp: ${tcp_map[$service]}, udp: ${udp_map[$service]}"
+        elif [[ -n "${tcp_map[$service]}" ]]; then
+            ports="tcp: ${tcp_map[$service]}"
+        elif [[ -n "${udp_map[$service]}" ]]; then
+            ports="udp: ${udp_map[$service]}"
+        fi
+        printf '%s' "$ports"
+    }
+
     _render_body() {
         local service primary_ports status_line_1 status_line_2
         for service in "${services[@]}"; do
-            primary_ports="-"
-            [[ -n "${tcp_map[$service]}" ]] && primary_ports="tcp: ${tcp_map[$service]}"
-            [[ -z "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]] && primary_ports="udp: ${udp_map[$service]}"
+            primary_ports=$(_format_ports_text "$service")
             _wrap_status_two_lines "${status_map[$service]}" status_line_1 status_line_2
             _print_service_row "${icon_map[$service]}" "$service" "${image_map[$service]}" "$status_line_1" "$primary_ports"
             if [[ "${has_status_row[$service]}" == "1" ]]; then
                 _print_row "" "" "$status_line_2" ""
-            fi
-            if [[ -n "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]]; then
-                _print_row "" "" "" "udp: ${udp_map[$service]}"
             fi
         done
     }
@@ -254,13 +262,10 @@ dc_live_action() {
         local primary_ports="-"
         local status_line_1 status_line_2
 
-        [[ -n "${tcp_map[$service]}" ]] && primary_ports="tcp: ${tcp_map[$service]}"
-        [[ -z "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]] && primary_ports="udp: ${udp_map[$service]}"
+        primary_ports=$(_format_ports_text "$service")
         _wrap_status_two_lines "${status_map[$service]}" status_line_1 status_line_2
 
-        if [[ "${has_status_row[$service]}" == "1" && "${has_udp_row[$service]}" == "1" ]]; then
-            row_count=3
-        elif [[ "${has_status_row[$service]}" == "1" || "${has_udp_row[$service]}" == "1" ]]; then
+        if [[ "${has_status_row[$service]}" == "1" ]]; then
             row_count=2
         fi
 
@@ -273,10 +278,6 @@ dc_live_action() {
         if [[ "${has_status_row[$service]}" == "1" ]]; then
             printf '\r'
             _print_row "" "" "$status_line_2" ""
-        fi
-        if [[ "${has_udp_row[$service]}" == "1" ]]; then
-            printf '\r'
-            _print_row "" "" "" "udp: ${udp_map[$service]}"
         fi
 
         down=$((body_rows - row - row_count + 1))
@@ -318,13 +319,8 @@ dc_live_action() {
         row_offset["$svc"]="$body_rows"
         has_status_row["$svc"]=0
         ((${#status_map[$svc]} > W_STATUS)) && has_status_row["$svc"]=1
-        has_udp_row["$svc"]=0
         ((body_rows += 1))
         [[ "${has_status_row[$svc]}" == "1" ]] && ((body_rows += 1))
-        if [[ -n "${tcp_map[$svc]}" && -n "${udp_map[$svc]}" ]]; then
-            has_udp_row["$svc"]=1
-            ((body_rows += 1))
-        fi
     done
 
     _render_full_table
@@ -377,6 +373,15 @@ dc_live_action() {
 
             if wait "$pid"; then
                 _capture_service "$svc"
+                if [[ "$action" == "up" || "$action" == "restart" ]]; then
+                    local settle_tries=30
+                    while [[ "${health_map[$svc]}" == "starting" && $settle_tries -gt 0 ]]; do
+                        sleep 0.25
+                        _capture_service "$svc"
+                        _refresh_service_rows "$svc"
+                        settle_tries=$((settle_tries - 1))
+                    done
+                fi
             else
                 icon_map["$svc"]=$'\033[31m■\033[0m'
                 status_map["$svc"]="$fail_label"
