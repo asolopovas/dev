@@ -28,52 +28,16 @@ require_docker() { require_cmd docker; docker info &>/dev/null || die "Docker da
 ensure_jq()      { command -v jq &>/dev/null || { log "Installing jq..."; sudo apt update && sudo apt install -y jq; }; }
 ensure_gum() {
     command -v gum &>/dev/null && return 0
-    confirm "gum is not installed. Install it now?" || die "gum is required for interactive selection."
+    log "Installing gum..."
     sudo mkdir -p /etc/apt/keyrings
     curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
     echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
     sudo apt update && sudo apt install -y gum
 }
 
-confirm() {
-    local reply
-    while true; do
-        read -rp "$1 [y/n] " -n 1 reply; echo
-        case "$reply" in [Yy]) return 0 ;; [Nn]) return 1 ;; *) warn "Please enter y or n." ;; esac
-    done
-}
-
-select_option() {
-    local prompt="$1"; shift
-    local options=("$@") selected=0 key
-    printf '%s\n' "$prompt" >&2
-    tput civis >&2
-    trap 'tput cnorm >&2' RETURN
-    while true; do
-        for i in "${!options[@]}"; do
-            ((i == selected)) && printf '  \033[32m> %s\033[0m\n' "${options[i]}" >&2 \
-                              || printf '    %s\n' "${options[i]}" >&2
-        done
-        read -rsn1 key
-        [[ "$key" == $'\x1b' ]] && { read -rsn2 key; case "$key" in
-            '[A') ((selected > 0)) && ((selected--)) ;; '[B') ((selected < ${#options[@]} - 1)) && ((selected++)) ;;
-        esac; }
-        [[ "$key" == "" ]] && break
-        printf '\033[%dA\033[J' "${#options[@]}" >&2
-    done
-    echo "${options[selected]}"
-}
-
-prompt_input() {
-    local prompt="$1" default="$2" reply
-    if [[ -n "$default" ]]; then
-        read -rp "$prompt [$default]: " reply
-        echo "${reply:-$default}"
-    else
-        while [[ -z "${reply:-}" ]]; do read -rp "$prompt: " reply; done
-        echo "$reply"
-    fi
-}
+confirm()       { ensure_gum && gum confirm "$1"; }
+select_option() { local prompt="$1"; shift; ensure_gum && gum choose --header="$prompt" "$@"; }
+prompt_input()  { ensure_gum && gum input --prompt="$1: " --value="${2:-}"; }
 
 new_host_wizard() {
     HOST=$(prompt_input "Hostname" "")
@@ -516,7 +480,7 @@ SSL:
 Tools:
   redis-flush                   Flush Redis
   redis-monitor                 Monitor Redis
-  debug <off|debug|profile>     Set Xdebug mode
+  debug [off|debug|profile]     Set Xdebug mode (interactive if omitted)
   supervisor-init                Initialize user-level Supervisor
   supervisor-conf <host>        Generate Supervisor config
   supervisor-restart            Start/reload Supervisor
@@ -548,8 +512,9 @@ main() {
         import-rootca)    ssl_import_root_to_chrome "$ROOT_CRT" ;;
         redis-flush)      $DC exec redis redis-cli flushall ;;
         redis-monitor)    $DC exec redis redis-cli monitor ;;
-        debug)            [[ -z "${1:-}" ]] && die "Usage: web debug <off|debug|profile>"
-                          sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$1/" "$SCRIPT_DIR/.env"; $DC up -d franken_php ;;
+        debug)            local mode="${1:-}"
+                          [[ -z "$mode" ]] && mode=$(select_option "Xdebug mode:" "off" "debug" "profile")
+                          sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$mode/" "$SCRIPT_DIR/.env"; $DC up -d franken_php ;;
         supervisor-init)  supervisor_init ;;
         supervisor-conf)    supervisor_generate_conf "${1:-}" ;;
         supervisor-restart) supervisor_restart ;;
