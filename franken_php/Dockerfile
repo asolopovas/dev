@@ -1,4 +1,4 @@
-FROM dunglas/frankenphp:1.7.0-builder-php8.3.22
+FROM dunglas/frankenphp:1.11.1-builder-php8.4
 
 # Build args
 ARG UID=1000
