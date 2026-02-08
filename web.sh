@@ -17,10 +17,12 @@ SUPERVISOR_DIR="${SUPERVISOR_DIR:-$HOME/supervisor}"
 KNOWN_SLDS="co.uk gov.uk com.br co.jp"
 _HOSTS_MODULE_PATH_CACHED="" _IS_WSL=""
 
-die()  { printf '\033[31mError: %s\033[0m\n' "$1" >&2; exit 1; }
-warn() { printf '\033[0;33m%s\033[0m\n' "$1" >&2; }
-info() { printf '\033[0;32m%s\033[0m\n' "$1"; }
-log()  { printf '%s\n' "$1"; }
+_has_gum() { command -v gum &>/dev/null; }
+die()  { if _has_gum; then gum log --level error "$1" >&2; else printf '\033[31mError: %s\033[0m\n' "$1" >&2; fi; exit 1; }
+warn() { if _has_gum; then gum log --level warn "$1" >&2; else printf '\033[0;33m%s\033[0m\n' "$1" >&2; fi; }
+info() { if _has_gum; then gum log --level info "$1"; else printf '\033[0;32m%s\033[0m\n' "$1"; fi; }
+log()  { if _has_gum; then gum log --level debug "$1"; else printf '%s\n' "$1"; fi; }
+spin() { if _has_gum; then gum spin --spinner dot --title "$1" -- "${@:2}"; else log "$1"; "${@:2}"; fi; }
 
 require_cmd()    { command -v "$1" &>/dev/null || die "$1 is not installed."; }
 require_host()   { [[ -n "${1:-}" ]] || die "No hostname specified. Usage: web $2 <hostname>"; }
@@ -296,7 +298,7 @@ build_webconf() {
     done < <(hosts_json_query -r '.hosts[] | [.name, .type, .db] | @tsv')
 
     info "Finished building web configs. Restarting Caddy..."
-    $DC restart franken_php
+    spin "Restarting Caddy..." $DC restart franken_php
 }
 
 supervisor_init() {
@@ -437,7 +439,7 @@ dc_build() {
     local svc="${1:-}" cache="${2:-}"
     [[ "$cache" == "--no-cache" ]] || cache=""
     log "Building ${svc:-all services}..."
-    $DC build $cache $svc && $DC up -d --force-recreate $svc
+    $DC build $cache $svc && spin "Recreating containers..." $DC up -d --force-recreate $svc
 }
 
 parse_new_host_args() {
@@ -493,10 +495,10 @@ EOF
 main() {
     local cmd="${1:-help}"; shift 2>/dev/null || true
     case "$cmd" in
-        up)               $DC up -d "$@" ;;
-        down)             $DC down ;;
-        stop)             $DC stop "$@" ;;
-        restart)          $DC restart "$@" ;;
+        up)               spin "Starting services..." $DC up -d "$@" ;;
+        down)             spin "Stopping services..." $DC down ;;
+        stop)             spin "Stopping services..." $DC stop "$@" ;;
+        restart)          spin "Restarting services..." $DC restart "$@" ;;
         build)            dc_build "$@" ;;
         ps)               $DC ps "$@" ;;
         log)              $DC logs -f "$@" ;;
@@ -507,14 +509,14 @@ main() {
         build-webconf)    build_webconf ;;
         bash)             $DC exec franken_php bash ;;
         fish)             $DC exec franken_php fish ;;
-        rootssl)          ssl_generate_root; $DC restart franken_php ;;
+        rootssl)          ssl_generate_root; spin "Restarting Caddy..." $DC restart franken_php ;;
         hostssl)          require_host "${1:-}" "hostssl"; ssl_generate_host "$1" ;;
         import-rootca)    ssl_import_root_to_chrome "$ROOT_CRT" ;;
         redis-flush)      $DC exec redis redis-cli flushall ;;
         redis-monitor)    $DC exec redis redis-cli monitor ;;
         debug)            local mode="${1:-}"
                           [[ -z "$mode" ]] && mode=$(select_option "Xdebug mode:" "off" "debug" "profile")
-                          sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$mode/" "$SCRIPT_DIR/.env"; $DC up -d franken_php ;;
+                          sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$mode/" "$SCRIPT_DIR/.env"; spin "Applying Xdebug mode: $mode..." $DC up -d franken_php ;;
         supervisor-init)  supervisor_init ;;
         supervisor-conf)    supervisor_generate_conf "${1:-}" ;;
         supervisor-restart) supervisor_restart ;;
