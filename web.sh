@@ -136,7 +136,7 @@ dc_live_action() {
     local services=("$@")
     local -a frames=("-" "\\" "|" "/")
     local frame_idx=0
-    local W_SERVICE=14 W_IMAGE=30 W_STATUS=24 W_PORTS=38
+    local W_SERVICE=14 W_IMAGE=30 W_STATUS=24 W_PORTS=32
     local cursor_hidden=0
     local action_label progress_label fail_label
 
@@ -148,7 +148,7 @@ dc_live_action() {
         *)       action_label="Running"   ; progress_label="Running..."    ; fail_label="Action failed" ;;
     esac
 
-    declare -A image_map status_map state_map health_map tcp_map udp_map icon_map row_offset has_status_row
+    declare -A image_map status_map state_map health_map tcp_map udp_map icon_map row_offset has_status_row has_ports_row
     local body_rows=0
 
     _repeat_char() {
@@ -216,27 +216,32 @@ dc_live_action() {
         out2_ref="${tail:0:W_STATUS}"
     }
 
-    _format_ports_text() {
+    _wrap_ports_two_lines() {
         local service="$1"
-        local ports="-"
+        local -n out1_ref="$2"
+        local -n out2_ref="$3"
+
+        out1_ref="-"
+        out2_ref=""
+
         if [[ -n "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]]; then
-            ports="tcp: ${tcp_map[$service]}, udp: ${udp_map[$service]}"
+            out1_ref="tcp: ${tcp_map[$service]}"
+            out2_ref="udp: ${udp_map[$service]}"
         elif [[ -n "${tcp_map[$service]}" ]]; then
-            ports="tcp: ${tcp_map[$service]}"
+            out1_ref="tcp: ${tcp_map[$service]}"
         elif [[ -n "${udp_map[$service]}" ]]; then
-            ports="udp: ${udp_map[$service]}"
+            out1_ref="udp: ${udp_map[$service]}"
         fi
-        printf '%s' "$ports"
     }
 
     _render_body() {
-        local service primary_ports status_line_1 status_line_2
+        local service primary_ports secondary_ports status_line_1 status_line_2
         for service in "${services[@]}"; do
-            primary_ports=$(_format_ports_text "$service")
+            _wrap_ports_two_lines "$service" primary_ports secondary_ports
             _wrap_status_two_lines "${status_map[$service]}" status_line_1 status_line_2
             _print_service_row "${icon_map[$service]}" "$service" "${image_map[$service]}" "$status_line_1" "$primary_ports"
-            if [[ "${has_status_row[$service]}" == "1" ]]; then
-                _print_row "" "" "$status_line_2" ""
+            if [[ "${has_status_row[$service]}" == "1" || "${has_ports_row[$service]}" == "1" ]]; then
+                _print_row "" "" "$status_line_2" "$secondary_ports"
             fi
         done
     }
@@ -260,12 +265,13 @@ dc_live_action() {
         local row_count=1
         local up down
         local primary_ports="-"
+        local secondary_ports=""
         local status_line_1 status_line_2
 
-        primary_ports=$(_format_ports_text "$service")
+        _wrap_ports_two_lines "$service" primary_ports secondary_ports
         _wrap_status_two_lines "${status_map[$service]}" status_line_1 status_line_2
 
-        if [[ "${has_status_row[$service]}" == "1" ]]; then
+        if [[ "${has_status_row[$service]}" == "1" || "${has_ports_row[$service]}" == "1" ]]; then
             row_count=2
         fi
 
@@ -275,9 +281,9 @@ dc_live_action() {
         ((up > 0)) && printf '\033[%sA' "$up"
         printf '\r'
         _print_service_row "${icon_map[$service]}" "$service" "${image_map[$service]}" "$status_line_1" "$primary_ports"
-        if [[ "${has_status_row[$service]}" == "1" ]]; then
+        if [[ "${has_status_row[$service]}" == "1" || "${has_ports_row[$service]}" == "1" ]]; then
             printf '\r'
-            _print_row "" "" "$status_line_2" ""
+            _print_row "" "" "$status_line_2" "$secondary_ports"
         fi
 
         down=$((body_rows - row - row_count + 1))
@@ -318,9 +324,11 @@ dc_live_action() {
         _capture_service "$svc"
         row_offset["$svc"]="$body_rows"
         has_status_row["$svc"]=0
+        has_ports_row["$svc"]=0
         ((${#status_map[$svc]} > W_STATUS)) && has_status_row["$svc"]=1
+        [[ -n "${tcp_map[$svc]}" && -n "${udp_map[$svc]}" ]] && has_ports_row["$svc"]=1
         ((body_rows += 1))
-        [[ "${has_status_row[$svc]}" == "1" ]] && ((body_rows += 1))
+        [[ "${has_status_row[$svc]}" == "1" || "${has_ports_row[$svc]}" == "1" ]] && ((body_rows += 1))
     done
 
     _render_full_table
