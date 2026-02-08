@@ -73,15 +73,10 @@ run_test() {
     fi
 }
 
-test_hostname_root_cases() {
-    assert_eq "example" "$(hostname_root "sub.example.test")" &&
-    assert_eq "example" "$(hostname_root "example.co.uk")" &&
-    assert_eq "localhost" "$(hostname_root "localhost")"
-}
-
 test_make_db_name_cases() {
     assert_eq "example_wp" "$(make_db_name "example.test" "wp")" &&
     assert_eq "example_sub_db" "$(make_db_name "sub.example.test" "laravel")" &&
+    assert_eq "example_wp" "$(make_db_name "example.co.uk" "wp")" &&
     assert_eq "db_3oak_wp" "$(make_db_name "3oak.test" "wp")"
 }
 
@@ -148,7 +143,6 @@ test_remove_host_cleans_local_files() {
 printf "\nweb.sh essential tests\n======================\n\n"
 
 tests=(
-    test_hostname_root_cases
     test_make_db_name_cases
     test_parse_new_host_args
     test_parse_new_host_args_errors

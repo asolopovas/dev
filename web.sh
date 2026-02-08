@@ -4,7 +4,6 @@ set -o errexit
 set -o pipefail
 
 WEB_ROOT="${WEB_ROOT:-$HOME/www}"
-USERNAME="${USERNAME:-$(whoami)}"
 SCRIPT_DIR="${SCRIPT_DIR:-$HOME/www/dev}"
 BACKEND_DIR="${BACKEND_DIR:-$SCRIPT_DIR/franken_php}"
 BACKEND_CONFIG_DIR="$BACKEND_DIR/config"
@@ -441,18 +440,21 @@ powershell_exe() { command -v pwsh.exe &>/dev/null && echo "pwsh.exe" || echo "p
 hosts_json_query()    { jq "$@" "$HOSTS_JSON"; }
 hosts_json_get_host() { hosts_json_query -r --arg hn "$1" '.hosts[] | select(.name == $hn)'; }
 hosts_json_get_db()   { hosts_json_query -r --arg hn "$1" '.hosts[] | select(.name == $hn) | .db'; }
+hosts_json_write() {
+    local tmp
+    tmp=$(mktemp)
+    jq "$@" "$HOSTS_JSON" > "$tmp" && mv "$tmp" "$HOSTS_JSON"
+}
 
 hosts_json_add() {
     local host_name="$1" host_type="$2" db_name="$3"
     [[ -n "$(hosts_json_get_host "$host_name")" ]] && { warn "Host $host_name already exists."; return 1; }
-    local tmp; tmp=$(mktemp)
-    jq --arg hn "$host_name" --arg ht "$host_type" --arg db "$db_name" \
-        '.hosts += [{name: $hn, type: $ht, db: $db}]' "$HOSTS_JSON" > "$tmp" && mv "$tmp" "$HOSTS_JSON"
+    hosts_json_write --arg hn "$host_name" --arg ht "$host_type" --arg db "$db_name" \
+        '.hosts += [{name: $hn, type: $ht, db: $db}]'
 }
 
 hosts_json_remove() {
-    local tmp; tmp=$(mktemp)
-    jq --arg hn "$1" 'del(.hosts[] | select(.name == $hn))' "$HOSTS_JSON" > "$tmp" && mv "$tmp" "$HOSTS_JSON"
+    hosts_json_write --arg hn "$1" 'del(.hosts[] | select(.name == $hn))'
 }
 
 hosts_json_ensure_defaults() {
@@ -469,17 +471,6 @@ hosts_json_ensure_defaults() {
     return 1
 }
 
-hostname_root() {
-    local -a parts; IFS='.' read -r -a parts <<< "$1"
-    local n=${#parts[@]}
-    ((n <= 1)) && { echo "$1"; return; }
-    local tld_count=1 last_two="${parts[n-2]}.${parts[n-1]}" sld
-    for sld in $KNOWN_SLDS; do [[ "$last_two" == "$sld" ]] && { tld_count=2; break; }; done
-    local idx=$((n - tld_count - 1))
-    ((idx < 0)) && idx=0
-    echo "${parts[idx]}"
-}
-
 sanitize_db_identifier() {
     local c="${1//[^A-Za-z0-9_]/_}"
     while [[ "$c" == _* ]]; do c="${c#_}"; done
@@ -491,12 +482,16 @@ sanitize_db_identifier() {
 make_db_name() {
     local host="$1" host_type="$2"
     local -a parts; IFS='.' read -r -a parts <<< "$host"
-    local n=${#parts[@]} main_domain sub_domain="" tld_count=1
+    local n=${#parts[@]} main_domain sub_domain="" tld_count=1 sld
 
     if ((n <= 1)); then
         main_domain="$host"
     else
-        ((n >= 2)) && ((${#parts[n-2]} <= 3)) && tld_count=2
+        local last_two="${parts[n-2]}.${parts[n-1]}"
+        for sld in $KNOWN_SLDS; do
+            [[ "$last_two" == "$sld" ]] && { tld_count=2; break; }
+        done
+        ((tld_count == 1 && n >= 2 && ${#parts[n-2]} <= 3)) && tld_count=2
         local idx=$((n - 1 - tld_count))
         ((idx < 0)) && idx=0
         main_domain="${parts[idx]}"
