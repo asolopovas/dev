@@ -1,10 +1,9 @@
 FROM dunglas/frankenphp:1.7.0-builder-php8.3.22
 
-# ── Build args
+# ── Build args ────────────────────────────────────────────────────────
 ARG UID=1000
 ARG GID=1000
 ARG APP_USER=app
-ARG NODE_VERSION=24.12.0
 ARG WORKDIR=/var/www
 
 # ── System packages + PHP extensions (single layer)
@@ -67,8 +66,7 @@ RUN set -eux; \
     rm -f /tmp/wkhtmltox.deb; \
     pecl clear-cache; \
     apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/* /tmp/*
+    rm -rf /tmp/*
 
 # ── User configuration
 RUN set -eux; \
@@ -97,16 +95,24 @@ COPY php-env.sh entrypoint.sh /usr/local/bin/
 # ── Switch to non-root user
 USER ${UID}:${GID}
 
-# ── User-space tools (Node, Bun, Composer, fd, fzf)
+# ── User-space tool versions (declared here to preserve layer cache) ──
+ARG NODE_VERSION=24.13.0
+ARG NPM_VERSION=11.7
+ARG FD_VERSION=10.3.0
+ARG FZF_VERSION=0.67.0
+
+# ── User-space tools ──────────────────────────────────────────────────
+RUN mkdir -p "$HOME/.local/bin" && touch "$HOME/.env-vars"
+
+# Volta + Node
+RUN curl -fsSL https://get.volta.sh | bash \
+    && "$HOME/.volta/bin/volta" install "node@${NODE_VERSION}" "npm@${NPM_VERSION}"
+
+# Bun
+RUN curl -fsSL https://bun.com/install | bash
+
+# Composer (with signature verification)
 RUN set -eux; \
-    mkdir -p "$HOME/.local/bin"; \
-    touch "$HOME/.env-vars"; \
-    # Volta + Node
-    curl -fsSL https://get.volta.sh | bash; \
-    "$HOME/.volta/bin/volta" install "node@${NODE_VERSION}" npm@11.7; \
-    # Bun
-    curl -fsSL https://bun.com/install | bash; \
-    # Composer (with signature verification)
     cd /tmp; \
     php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"; \
     php -r "copy('https://composer.github.io/installer.sig', 'composer-setup.sig');"; \
@@ -118,21 +124,21 @@ RUN set -eux; \
             }"; \
     php composer-setup.php --install-dir="$HOME/.local/bin" --filename=composer; \
     rm -f composer-setup.php composer-setup.sig; \
-    composer --version; \
-    # fd
-    FD_VER="10.2.0"; \
-    ARCH="$(dpkg --print-architecture)"; \
-    curl -fsSL "https://github.com/sharkdp/fd/releases/download/v${FD_VER}/fd-musl_${FD_VER}_${ARCH}.deb" \
-        -o /tmp/fd.deb; \
-    sudo dpkg -i /tmp/fd.deb; \
-    rm -f /tmp/fd.deb; \
-    # fzf
-    FZF_VER="0.65.1"; \
-    curl -fsSL "https://github.com/junegunn/fzf/releases/download/v${FZF_VER}/fzf-${FZF_VER}-linux_amd64.tar.gz" \
-        -o /tmp/fzf.tgz; \
-    tar -xf /tmp/fzf.tgz -C /tmp; \
-    install -m 0755 /tmp/fzf "$HOME/.local/bin/fzf"; \
-    rm -f /tmp/fzf.tgz /tmp/fzf
+    composer --version
+
+# fd
+RUN ARCH="$(dpkg --print-architecture)" \
+    && curl -fsSL "https://github.com/sharkdp/fd/releases/download/v${FD_VERSION}/fd-musl_${FD_VERSION}_${ARCH}.deb" \
+        -o /tmp/fd.deb \
+    && sudo dpkg -i /tmp/fd.deb \
+    && rm -f /tmp/fd.deb
+
+# fzf
+RUN curl -fsSL "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-linux_amd64.tar.gz" \
+        -o /tmp/fzf.tgz \
+    && tar -xf /tmp/fzf.tgz -C /tmp \
+    && install -m 0755 /tmp/fzf "$HOME/.local/bin/fzf" \
+    && rm -f /tmp/fzf.tgz /tmp/fzf
 
 WORKDIR ${WORKDIR}
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
