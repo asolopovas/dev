@@ -1,13 +1,13 @@
 FROM dunglas/frankenphp:1.7.0-builder-php8.3.22
 
-# ── Build args ────────────────────────────────────────────────────────
+# ── Build args
 ARG UID=1000
 ARG GID=1000
 ARG APP_USER=app
 ARG NODE_VERSION=24.12.0
 ARG WORKDIR=/var/www
 
-# ── System packages + PHP extensions (single layer) ──────────────────
+# ── System packages + PHP extensions (single layer)
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
@@ -70,7 +70,7 @@ RUN set -eux; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/* /tmp/*
 
-# ── User configuration ───────────────────────────────────────────────
+# ── User configuration
 RUN set -eux; \
     groupadd -g "${GID}" "${APP_USER}" || true; \
     useradd -m -u "${UID}" -g "${GID}" -s /bin/bash "${APP_USER}"; \
@@ -81,7 +81,7 @@ RUN set -eux; \
     chmod 0440 "/etc/sudoers.d/${APP_USER}"; \
     echo "Set disable_coredump false" > /etc/sudo.conf
 
-# ── Environment ───────────────────────────────────────────────────────
+# ── Environment
 ENV APP_USER=${APP_USER} \
     VOLTA_HOME=/home/${APP_USER}/.volta \
     XDG_DATA_HOME=/home/${APP_USER}/.local/share \
@@ -90,14 +90,14 @@ ENV APP_USER=${APP_USER} \
     WORKDIR=${WORKDIR}
 ENV PATH=${VOLTA_HOME}/bin:/home/${APP_USER}/.local/bin:${PATH}
 
-# ── Config files (before switching user for correct ownership) ────────
+# ── Config files (before switching user for correct ownership)
 COPY conf.d/  /usr/local/etc/php/conf.d/
 COPY php-env.sh entrypoint.sh /usr/local/bin/
 
-# ── Switch to non-root user ──────────────────────────────────────────
+# ── Switch to non-root user
 USER ${UID}:${GID}
 
-# ── User-space tools (Node, Bun, Composer, fd, fzf) ─────────────────
+# ── User-space tools (Node, Bun, Composer, fd, fzf)
 RUN set -eux; \
     mkdir -p "$HOME/.local/bin"; \
     touch "$HOME/.env-vars"; \
