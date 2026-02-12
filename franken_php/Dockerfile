@@ -66,6 +66,18 @@ RUN ARCH="$(dpkg --print-architecture)" \
     && (dpkg -i /tmp/wkhtmltox.deb || apt-get install -f -y --no-install-recommends) \
     && rm -f /tmp/wkhtmltox.deb
 
+# Supercronic (cron replacement designed for containers)
+ARG SUPERCRONIC_VERSION=v0.2.38
+RUN ARCH="$(dpkg --print-architecture)" \
+    && case "$ARCH" in \
+        amd64) SUPERCRONIC_ARCH=amd64 ;; \
+        arm64) SUPERCRONIC_ARCH=arm64 ;; \
+        *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;; \
+    esac \
+    && wget -q "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-${SUPERCRONIC_ARCH}" \
+        -O /usr/local/bin/supercronic \
+    && chmod 0755 /usr/local/bin/supercronic
+
 # User configuration
 RUN set -eux; \
     groupadd -g "${GID}" "${APP_USER}" || true; \
