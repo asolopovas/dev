@@ -5,7 +5,9 @@
       "Bash(git -C /home/andrius/www/dev log --oneline)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(make test:*)",
+      "Bash(docker compose config:*)"
     ],
     "deny": []
   }
