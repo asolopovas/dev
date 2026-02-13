@@ -7,7 +7,6 @@ networks:
 
 services:
     franken_php:
-        image: franken_php
         restart: always
         build:
             context: ./franken_php
@@ -17,6 +16,11 @@ services:
                 GID: ${GID}
                 NODE_VERSION: ${NODE_VERSION}
                 WORKDIR: ${WORKDIR}
+        depends_on:
+            mariadb:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
         environment:
             APP_ENV: ${APP_ENV}
             XDEBUG_HOST: ${XDEBUG_HOST}
@@ -42,22 +46,34 @@ services:
             - dev_network
 
     mariadb:
-        build:
-            context: ./mariadb
         image: mariadb:lts
         restart: always
         environment:
             MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
         volumes:
             - db:/var/lib/mysql
+            - ./mariadb/custom.cnf:/etc/mysql/conf.d/custom.cnf:ro
+        healthcheck:
+            test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+            interval: 10s
+            timeout: 5s
+            retries: 3
         networks:
             - dev_network
         ports:
             - 3306:3306
 
     redis:
-        build: ./redis
+        image: redis:7.4.2-bookworm
         restart: always
+        volumes:
+            - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+        command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 10s
+            timeout: 5s
+            retries: 3
         networks:
             - dev_network
         ports:
@@ -68,6 +84,9 @@ services:
         volumes:
             - phpmyadmin:/var/www/html
         restart: always
+        depends_on:
+            mariadb:
+                condition: service_healthy
         environment:
             PMA_HOST: "mariadb"
             PMA_USER: "root"
@@ -80,8 +99,8 @@ services:
         networks:
             - dev_network
 
-    mailhog:
-        image: mailhog/mailhog
+    mailpit:
+        image: axllent/mailpit:latest
         restart: always
         ports:
             - 1025:1025
@@ -97,5 +116,10 @@ services:
         volumes:
             - ./typesense-data:/data
         command: '--data-dir /data --api-key=xyz --enable-cors'
+        healthcheck:
+            test: ["CMD", "curl", "-sf", "http://localhost:8108/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 3
         networks:
             - dev_network

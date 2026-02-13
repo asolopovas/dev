@@ -1,5 +1,5 @@
 set -l cmds up down stop restart build ps log new-host remove-host build-webconf bash fish rootssl hostssl import-rootca redis-flush redis-monitor debug supervisor-init supervisor-conf supervisor-restart install dir git-update help
-set -l services franken_php mariadb redis phpmyadmin mailhog typesense
+set -l services franken_php mariadb redis phpmyadmin mailpit typesense
 set -l debug_modes off develop coverage debug profile trace
 set -l site_types wp laravel
 

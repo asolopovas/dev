@@ -7,7 +7,9 @@ ARG APP_USER=app
 ARG WORKDIR=/var/www
 
 # System packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
         # PHP extension build deps
         libavif-dev \
         libfreetype6-dev \
@@ -99,14 +101,14 @@ ENV APP_USER=${APP_USER} \
 ENV PATH=${VOLTA_HOME}/bin:/home/${APP_USER}/.local/bin:${PATH}
 
 # Config files (before switching user for correct ownership)
-COPY conf.d/  /usr/local/etc/php/conf.d/
-COPY php-env.sh entrypoint.sh /usr/local/bin/
+COPY --link conf.d/  /usr/local/etc/php/conf.d/
+COPY --link php-env.sh entrypoint.sh /usr/local/bin/
 
 # Switch to non-root user
 USER ${UID}:${GID}
 
 # User-space tool versions (declared here to preserve layer cache)
-ARG NODE_VERSION=24.13.0
+ARG NODE_VERSION=22.16.0
 ARG NPM_VERSION=11.7
 ARG FD_VERSION=10.3.0
 ARG FZF_VERSION=0.67.0
@@ -115,14 +117,16 @@ ARG FZF_VERSION=0.67.0
 RUN mkdir -p "$HOME/.local/bin" && touch "$HOME/.env-vars"
 
 # Volta + Node
-RUN curl -fsSL https://get.volta.sh | bash \
+RUN --mount=type=cache,target=/home/${APP_USER}/.volta/tmp,uid=${UID},gid=${GID} \
+    curl -fsSL https://get.volta.sh | bash \
     && "$HOME/.volta/bin/volta" install "node@${NODE_VERSION}" "npm@${NPM_VERSION}"
 
 # Bun
 RUN curl -fsSL https://bun.com/install | bash
 
 # Composer (with signature verification)
-RUN set -eux; \
+RUN --mount=type=cache,target=/home/${APP_USER}/.cache/composer,uid=${UID},gid=${GID} \
+    set -eux; \
     cd /tmp; \
     php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"; \
     php -r "copy('https://composer.github.io/installer.sig', 'composer-setup.sig');"; \
@@ -144,7 +148,8 @@ RUN ARCH="$(dpkg --print-architecture)" \
     && rm -f /tmp/fd.deb
 
 # fzf
-RUN curl -fsSL "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-linux_amd64.tar.gz" \
+RUN ARCH="$(dpkg --print-architecture)" \
+    && curl -fsSL "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-linux_${ARCH}.tar.gz" \
         -o /tmp/fzf.tgz \
     && tar -xf /tmp/fzf.tgz -C /tmp \
     && install -m 0755 /tmp/fzf "$HOME/.local/bin/fzf" \
