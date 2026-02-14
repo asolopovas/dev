@@ -4,7 +4,7 @@ Docker-based PHP development environment for WordPress and Laravel.
 
 ## Features
 
-- **FrankenPHP** (Caddy + PHP 8.3), MariaDB, Redis, PhpMyAdmin, Mailhog, Typesense
+- **FrankenPHP** (Caddy + PHP 8.4), MariaDB, Redis, PhpMyAdmin, Mailpit, Typesense
 - Automatic SSL with custom root CA and HTTP/3 support
 - WordPress/Laravel scaffolding with database provisioning
 - Local domain redirection (Linux + WSL)
@@ -48,11 +48,11 @@ web up                               # start services
 
 | Service | Ports |
 |---|---|
-| **franken_php** - PHP 8.3 + Caddy + Xdebug | 80, 443, 443/udp, 8080 |
+| **franken_php** - PHP 8.4 + Caddy + Xdebug | 80, 443, 443/udp, 8080 |
 | **mariadb** - MySQL compatible | 3306 |
 | **redis** | 6379 |
 | **phpmyadmin** | via Caddy |
-| **mailhog** | 1025 (SMTP), 8025 (UI) |
+| **mailpit** | 1025 (SMTP), 8025 (UI) |
 | **typesense** | 8108 |
 
 ## Project Structure

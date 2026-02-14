@@ -7,6 +7,7 @@ networks:
 
 services:
     franken_php:
+        image: franken_php
         restart: always
         build:
             context: ./franken_php
@@ -117,7 +118,7 @@ services:
             - ./typesense-data:/data
         command: '--data-dir /data --api-key=xyz --enable-cors'
         healthcheck:
-            test: ["CMD", "curl", "-sf", "http://localhost:8108/health"]
+            test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8108'"]
             interval: 10s
             timeout: 5s
             retries: 3

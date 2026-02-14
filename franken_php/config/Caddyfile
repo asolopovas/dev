@@ -1,7 +1,5 @@
 {
-	frankenphp {
-		num_threads 4
-	}
+	frankenphp
 }
 
 import sites/*

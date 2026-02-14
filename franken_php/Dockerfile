@@ -117,16 +117,14 @@ ARG FZF_VERSION=0.67.0
 RUN mkdir -p "$HOME/.local/bin" && touch "$HOME/.env-vars"
 
 # Volta + Node
-RUN --mount=type=cache,target=/home/${APP_USER}/.volta/tmp,uid=${UID},gid=${GID} \
-    curl -fsSL https://get.volta.sh | bash \
+RUN curl -fsSL https://get.volta.sh | bash \
     && "$HOME/.volta/bin/volta" install "node@${NODE_VERSION}" "npm@${NPM_VERSION}"
 
 # Bun
 RUN curl -fsSL https://bun.com/install | bash
 
 # Composer (with signature verification)
-RUN --mount=type=cache,target=/home/${APP_USER}/.cache/composer,uid=${UID},gid=${GID} \
-    set -eux; \
+RUN set -eux; \
     cd /tmp; \
     php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"; \
     php -r "copy('https://composer.github.io/installer.sig', 'composer-setup.sig');"; \

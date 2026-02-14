@@ -6,7 +6,7 @@ set -e
 
 $HOME/dotfiles/scripts/ops-update-symlinks.sh
 
-npm install -g @anthropic-ai/claude-code
+command -v claude >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code
 
 CRONTAB_FILE="${CRONTAB_FILE:-}"
 if [ -z "$CRONTAB_FILE" ]; then
