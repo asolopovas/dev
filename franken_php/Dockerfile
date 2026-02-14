@@ -135,7 +135,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && chmod 0440 "/etc/sudoers.d/${APP_USER}" \
     && echo "Set disable_coredump false" > /etc/sudo.conf
 
-ENV APP_USER=${APP_USER} \
+ENV PHP_INI_DIR=/usr/local/etc/php \
+    GODEBUG=cgocheck=0 \
+    APP_USER=${APP_USER} \
     XDG_DATA_HOME=/home/${APP_USER}/.local/share \
     XDG_CONFIG_HOME=/home/${APP_USER}/.config \
     XDG_CACHE_HOME=/home/${APP_USER}/.cache \
