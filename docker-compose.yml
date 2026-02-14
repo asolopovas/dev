@@ -34,6 +34,7 @@ services:
             - "443:443/udp"
             - "3000:3000/udp"
             - "3001:3001/udp"
+            - "5173:5173"
         volumes:
             - ${MAPDIR}:/var/www
             - ${HOME}/.ssh:/home/www/.ssh
