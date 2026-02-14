@@ -7,7 +7,7 @@ networks:
 
 services:
     franken_php:
-        image: franken_php
+        image: asolopovas/franken-php:latest
         restart: always
         build:
             context: ./franken_php

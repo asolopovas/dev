@@ -1,16 +1,12 @@
-FROM dunglas/frankenphp:1.11.1-builder-php8.4
+###############################################################################
+# Stage 1 — build PHP extensions that need -dev headers / build tools
+###############################################################################
+FROM dunglas/frankenphp:1.11.1-php8.4 AS builder
 
-# Build args
-ARG UID=1000
-ARG GID=1000
-ARG APP_USER=app
-ARG WORKDIR=/var/www
-
-# System packages
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-        # PHP extension build deps
+        $PHPIZE_DEPS \
         libavif-dev \
         libfreetype6-dev \
         libmagickwand-dev \
@@ -19,10 +15,60 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libpq-dev \
         libpng-dev \
         libwebp-dev \
-        libzip-dev \
-        # Runtime tools
+        libzip-dev
+
+# PHP core extensions (mbstring, xml, pdo_sqlite already in base image)
+RUN docker-php-ext-configure gd \
+        --with-freetype --with-jpeg --with-avif --with-webp \
+    && docker-php-ext-configure intl \
+    && docker-php-ext-install -j"$(nproc)" \
+        bcmath \
+        calendar \
+        exif \
+        gd \
+        intl \
+        mysqli \
+        pdo \
+        pdo_mysql \
+        pdo_pgsql \
+        pcntl \
+        zip
+
+# PECL extensions
+RUN pecl install apcu igbinary imagick redis xdebug \
+    && docker-php-ext-enable apcu igbinary imagick redis xdebug \
+    && pecl clear-cache
+
+###############################################################################
+# Stage 2 — final slim runtime image
+###############################################################################
+FROM dunglas/frankenphp:1.11.1-php8.4
+
+ARG UID=1000
+ARG GID=1000
+ARG APP_USER=app
+ARG WORKDIR=/var/www
+
+# Copy compiled extensions from builder
+COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
+COPY --from=builder /usr/local/etc/php/conf.d/     /usr/local/etc/php/conf.d/
+
+# Runtime libraries + tools (single layer, no -dev packages, clean at end)
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+        libavif16 \
+        libfreetype6 \
+        libmagickwand-7.q16hdri-10 \
+        libjpeg62-turbo \
+        libmemcached11t64 \
+        libpq5 \
+        libpng16-16t64 \
+        libwebp7 \
+        libzip5 \
+        libicu76 \
+        xfonts-75dpi \
         curl \
-        ffmpeg \
         fish \
         git \
         imagemagick \
@@ -34,38 +80,16 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         sudo \
         unzip \
         wget \
-        xfonts-75dpi
+    && rm -rf /tmp/* /var/tmp/*
 
-# PHP core extensions
-RUN docker-php-ext-configure gd \
-        --with-freetype --with-jpeg --with-avif --with-webp \
-    && docker-php-ext-configure intl \
-    && docker-php-ext-install -j"$(nproc)" \
-        bcmath \
-        calendar \
-        exif \
-        gd \
-        intl \
-        mbstring \
-        mysqli \
-        pdo \
-        pdo_mysql \
-        pdo_pgsql \
-        pdo_sqlite \
-        pcntl \
-        xml \
-        zip
-
-# PECL extensions
-RUN pecl install apcu igbinary imagick redis xdebug \
-    && docker-php-ext-enable apcu igbinary imagick redis xdebug \
-    && pecl clear-cache
-
-# wkhtmltopdf
+# wkhtmltopdf (bookworm .deb needs --force-depends on Trixie due to t64 renames)
 RUN ARCH="$(dpkg --print-architecture)" \
+    && apt-get update -qq \
+    && apt-get install -y --no-install-recommends \
+        fontconfig libx11-6 libxcb1 libxext6 libxrender1 xfonts-base zlib1g \
     && wget -q "https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.bookworm_${ARCH}.deb" \
         -O /tmp/wkhtmltox.deb \
-    && (dpkg -i /tmp/wkhtmltox.deb || apt-get install -f -y --no-install-recommends) \
+    && dpkg --force-depends -i /tmp/wkhtmltox.deb \
     && rm -f /tmp/wkhtmltox.deb
 
 # Supercronic (cron replacement designed for containers)
@@ -98,7 +122,7 @@ ENV APP_USER=${APP_USER} \
     XDG_CONFIG_HOME=/home/${APP_USER}/.config \
     XDG_CACHE_HOME=/home/${APP_USER}/.cache \
     WORKDIR=${WORKDIR}
-ENV PATH=${VOLTA_HOME}/bin:/home/${APP_USER}/.local/bin:${PATH}
+ENV PATH=${VOLTA_HOME}/bin:/home/${APP_USER}/.bun/bin:/home/${APP_USER}/.local/bin:${PATH}
 
 # Config files (before switching user for correct ownership)
 COPY --link conf.d/  /usr/local/etc/php/conf.d/
@@ -108,6 +132,7 @@ COPY --link php-env.sh entrypoint.sh /usr/local/bin/
 USER ${UID}:${GID}
 
 # User-space tool versions (declared here to preserve layer cache)
+ARG VOLTA_VERSION=2.0.2
 ARG NODE_VERSION=22.16.0
 ARG NPM_VERSION=11.7
 ARG FD_VERSION=10.3.0
@@ -117,7 +142,7 @@ ARG FZF_VERSION=0.67.0
 RUN mkdir -p "$HOME/.local/bin" && touch "$HOME/.env-vars"
 
 # Volta + Node
-RUN curl -fsSL https://get.volta.sh | bash \
+RUN curl -fsSL https://get.volta.sh | bash -s -- --version "${VOLTA_VERSION}" --skip-setup \
     && "$HOME/.volta/bin/volta" install "node@${NODE_VERSION}" "npm@${NPM_VERSION}"
 
 # Bun
