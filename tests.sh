@@ -140,7 +140,111 @@ test_remove_host_cleans_local_files() {
     [[ ! -e "$SUPERVISOR_DIR/conf.d/cleanup_test.conf" ]] || return 1
 }
 
-printf "\nweb.sh essential tests\n======================\n\n"
+CONTAINER=franken_php
+
+dc_exec() { docker compose -f "$SCRIPT_DIR_ORIG/docker-compose.yml" exec -T "$CONTAINER" "$@"; }
+
+run_integration_test() {
+    local name="$1" result=0
+    "$name" || result=$?
+    if ((result == 0)); then
+        ((++PASS))
+        printf "  PASS  %s\n" "$name"
+    else
+        ((++FAIL))
+        printf "  FAIL  %s\n" "$name"
+    fi
+}
+
+services_up() {
+    docker compose -f "$SCRIPT_DIR_ORIG/docker-compose.yml" ps --status running --format '{{.Service}}' 2>/dev/null | grep -q franken_php
+}
+
+test_container_running() {
+    local status
+    status=$(docker compose -f "$SCRIPT_DIR_ORIG/docker-compose.yml" ps --status running --format '{{.Service}}' 2>/dev/null | sort)
+    assert_contains "$status" "franken_php" "franken_php running" &&
+    assert_contains "$status" "mariadb" "mariadb running" &&
+    assert_contains "$status" "redis" "redis running" &&
+    assert_contains "$status" "phpmyadmin" "phpmyadmin running" &&
+    assert_contains "$status" "mailpit" "mailpit running" &&
+    assert_contains "$status" "typesense" "typesense running"
+}
+
+test_php_version_and_extensions() {
+    local mods
+    mods=$(dc_exec php -m 2>/dev/null)
+    assert_contains "$mods" "bcmath" "ext-bcmath" &&
+    assert_contains "$mods" "calendar" "ext-calendar" &&
+    assert_contains "$mods" "exif" "ext-exif" &&
+    assert_contains "$mods" "gd" "ext-gd" &&
+    assert_contains "$mods" "intl" "ext-intl" &&
+    assert_contains "$mods" "mysqli" "ext-mysqli" &&
+    assert_contains "$mods" "pdo_mysql" "ext-pdo_mysql" &&
+    assert_contains "$mods" "pdo_pgsql" "ext-pdo_pgsql" &&
+    assert_contains "$mods" "pcntl" "ext-pcntl" &&
+    assert_contains "$mods" "zip" "ext-zip" &&
+    assert_contains "$mods" "apcu" "ext-apcu" &&
+    assert_contains "$mods" "igbinary" "ext-igbinary" &&
+    assert_contains "$mods" "imagick" "ext-imagick" &&
+    assert_contains "$mods" "redis" "ext-redis"
+}
+
+test_shared_libs_resolved() {
+    local missing
+    missing=$(dc_exec bash -c '
+        for f in /usr/local/bin/php /usr/local/bin/frankenphp /usr/local/lib/php/extensions/*/*.so; do
+            ldd "$f" 2>/dev/null | grep "not found"
+        done
+    ')
+    assert_eq "" "$missing" "no missing shared libs"
+}
+
+test_cli_tools() {
+    dc_exec node -v >/dev/null 2>&1 &&
+    dc_exec npm -v >/dev/null 2>&1 &&
+    dc_exec bun -v >/dev/null 2>&1 &&
+    dc_exec bash -c 'XDEBUG_MODE=off composer --version' >/dev/null 2>&1 &&
+    dc_exec git --version >/dev/null 2>&1 &&
+    dc_exec fish -v >/dev/null 2>&1 &&
+    dc_exec wkhtmltopdf --version >/dev/null 2>&1 &&
+    dc_exec supercronic --version >/dev/null 2>&1 &&
+    dc_exec rg --version >/dev/null 2>&1 &&
+    dc_exec fd --version >/dev/null 2>&1 &&
+    dc_exec fzf --version >/dev/null 2>&1
+}
+
+test_frankenphp_serves_hosts() {
+    local code
+    code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 http://phpmyadmin.test 2>/dev/null)
+    assert_eq "200" "$code" "phpmyadmin.test HTTP 200"
+}
+
+test_mariadb_accepts_connections() {
+    local result
+    result=$(docker compose -f "$SCRIPT_DIR_ORIG/docker-compose.yml" exec -T mariadb mariadb -uroot -psecret -e "SELECT 1 AS ok" --skip-column-names 2>/dev/null)
+    assert_eq "1" "$(echo "$result" | tr -d '[:space:]')" "mariadb SELECT 1"
+}
+
+test_redis_responds() {
+    local result
+    result=$(docker compose -f "$SCRIPT_DIR_ORIG/docker-compose.yml" exec -T redis redis-cli ping 2>/dev/null)
+    assert_eq "PONG" "$(echo "$result" | tr -d '[:space:]')" "redis PONG"
+}
+
+test_mailpit_accessible() {
+    local code
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8025 2>/dev/null)
+    assert_eq "200" "$code" "mailpit HTTP 200"
+}
+
+test_typesense_healthy() {
+    local code
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8108/health 2>/dev/null)
+    assert_eq "200" "$code" "typesense /health 200"
+}
+
+printf "\nweb.sh unit tests\n=================\n\n"
 
 tests=(
     test_make_db_name_cases
@@ -157,6 +261,26 @@ tests=(
 for t in "${tests[@]}"; do
     run_test "$t"
 done
+
+if services_up; then
+    printf "\nintegration tests (services running)\n====================================\n\n"
+    integration_tests=(
+        test_container_running
+        test_php_version_and_extensions
+        test_shared_libs_resolved
+        test_cli_tools
+        test_frankenphp_serves_hosts
+        test_mariadb_accepts_connections
+        test_redis_responds
+        test_mailpit_accessible
+        test_typesense_healthy
+    )
+    for t in "${integration_tests[@]}"; do
+        run_integration_test "$t"
+    done
+else
+    printf "\nSkipping integration tests (services not running)\n"
+fi
 
 printf "\nTotal: %d  Passed: %d  Failed: %d\n" "$((PASS + FAIL))" "$PASS" "$FAIL"
 ((FAIL == 0))
