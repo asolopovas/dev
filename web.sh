@@ -54,12 +54,10 @@ dc_action() {
         *)       action_label="Running"   ; spin_label="Running $action..."    ;;
     esac
 
-    # resolve which services are targeted
     if [[ ${#services[@]} -eq 0 ]]; then
         mapfile -t services < <($DC config --services 2>/dev/null)
     fi
 
-    # live actions render their own service table
     if _has_gum && [[ "$action" == "restart" || "$action" == "up" || "$action" == "stop" || "$action" == "down" ]]; then
         :
     elif _has_gum; then
@@ -71,7 +69,6 @@ dc_action() {
         log "$action_label: ${services[*]}"
     fi
 
-    # run the docker compose command
     case "$action" in
         restart|up|stop|down)
             if _has_gum; then
@@ -87,7 +84,6 @@ dc_action() {
         *)    spin "$spin_label" $DC "$action" "${services[@]}" ;;
     esac
 
-    # show status after the action unless live table already rendered it
     if ! { _has_gum && [[ "$action" == "restart" || "$action" == "up" || "$action" == "stop" || "$action" == "down" ]]; }; then
         echo ""
         dc_ps "${services[@]}"
@@ -275,8 +271,6 @@ dc_live_action() {
             row_count=2
         fi
 
-        # cursor is kept at the line below the full table; move to target row, redraw,
-        # then move back to the bottom anchor line.
         up=$((body_rows - row + 1))
         ((up > 0)) && printf '\033[%sA' "$up"
         printf '\r'
@@ -399,7 +393,6 @@ dc_live_action() {
         done
     fi
 
-    # place cursor below the live table
     ((cursor_hidden == 1)) && printf '\033[?25h'
     printf '\n'
 }

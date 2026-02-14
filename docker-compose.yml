@@ -29,19 +29,18 @@ services:
             XDEBUG_IDEKEY: ${XDEBUG_IDEKEY}
             XDEBUG_TRIGGER: ${XDEBUG_TRIGGER}
         ports:
-            - "80:80" # HTTP
-            - "8080:8080" # Development
-            - "443:443" # HTTPS
-            - "443:443/udp" # HTTP/3
-            - "3000:3000/udp" # HTTP/3
-            - "3001:3001/udp" # HTTP/3
+            - "80:80"
+            - "8080:8080"
+            - "443:443"
+            - "443:443/udp"
+            - "3000:3000/udp"
+            - "3001:3001/udp"
         volumes:
             - ${MAPDIR}:/var/www
             - ${HOME}/.ssh:/home/www/.ssh
             - ${HOME}/dotfiles:/home/www/dotfiles
             - phpmyadmin:/var/www/html
             - ./franken_php/config:/etc/caddy
-        # comment the following line in production, it allows to have nice human-readable logs in dev
         tty: true
         networks:
             - dev_network
