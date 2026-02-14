@@ -4,9 +4,13 @@ set -e
 
 /usr/local/bin/php-env.sh
 
-$HOME/dotfiles/scripts/ops-update-symlinks.sh
+if [ -x "$HOME/dotfiles/scripts/ops-update-symlinks.sh" ]; then
+    "$HOME/dotfiles/scripts/ops-update-symlinks.sh"
+fi
 
-command -v claude >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code
+if command -v npm >/dev/null 2>&1; then
+    command -v claude >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code || true
+fi
 
 CRONTAB_FILE="${CRONTAB_FILE:-}"
 if [ -z "$CRONTAB_FILE" ]; then

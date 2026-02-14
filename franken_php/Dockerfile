@@ -34,15 +34,21 @@ RUN pecl install apcu igbinary imagick redis xdebug \
     && docker-php-ext-enable apcu igbinary imagick redis xdebug \
     && pecl clear-cache
 
+FROM composer:2 AS composer-stage
+
 FROM dunglas/frankenphp:1.11.1-php8.4
 
 ARG UID=1000
 ARG GID=1000
-ARG APP_USER=app
+ARG APP_USER=www
 ARG WORKDIR=/var/www
+ARG SUPERCRONIC_VERSION=v0.2.38
+ARG FD_VERSION=10.3.0
+ARG FZF_VERSION=0.67.0
 
 COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 COPY --from=builder /usr/local/etc/php/conf.d/     /usr/local/etc/php/conf.d/
+COPY --from=composer-stage /usr/bin/composer        /usr/local/bin/composer
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -58,6 +64,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libzip5 \
         libicu76 \
         xfonts-75dpi \
+        fontconfig \
+        libx11-6 \
+        libxcb1 \
+        libxext6 \
+        libxrender1 \
+        xfonts-base \
+        zlib1g \
         curl \
         fish \
         git \
@@ -69,28 +82,21 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ssh \
         sudo \
         unzip \
-        wget \
-    && rm -rf /tmp/* /var/tmp/*
-
-RUN ARCH="$(dpkg --print-architecture)" \
-    && apt-get update -qq \
-    && apt-get install -y --no-install-recommends \
-        fontconfig libx11-6 libxcb1 libxext6 libxrender1 xfonts-base zlib1g \
-    && wget -q "https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.bookworm_${ARCH}.deb" \
-        -O /tmp/wkhtmltox.deb \
+    && ARCH="$(dpkg --print-architecture)" \
+    && curl -fsSL "https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.bookworm_${ARCH}.deb" \
+        -o /tmp/wkhtmltox.deb \
     && dpkg --force-depends -i /tmp/wkhtmltox.deb \
-    && rm -f /tmp/wkhtmltox.deb
-
-ARG SUPERCRONIC_VERSION=v0.2.38
-RUN ARCH="$(dpkg --print-architecture)" \
-    && case "$ARCH" in \
-        amd64) SUPERCRONIC_ARCH=amd64 ;; \
-        arm64) SUPERCRONIC_ARCH=arm64 ;; \
-        *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;; \
-    esac \
-    && wget -q "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-${SUPERCRONIC_ARCH}" \
-        -O /usr/local/bin/supercronic \
-    && chmod 0755 /usr/local/bin/supercronic
+    && curl -fsSL "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-${ARCH}" \
+        -o /usr/local/bin/supercronic \
+    && chmod 0755 /usr/local/bin/supercronic \
+    && curl -fsSL "https://github.com/sharkdp/fd/releases/download/v${FD_VERSION}/fd-musl_${FD_VERSION}_${ARCH}.deb" \
+        -o /tmp/fd.deb \
+    && dpkg -i /tmp/fd.deb \
+    && curl -fsSL "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-linux_${ARCH}.tar.gz" \
+        -o /tmp/fzf.tgz \
+    && tar -xf /tmp/fzf.tgz -C /usr/local/bin \
+    && chmod 0755 /usr/local/bin/fzf \
+    && rm -rf /tmp/* /var/tmp/*
 
 RUN set -eux; \
     groupadd -g "${GID}" "${APP_USER}" || true; \
@@ -103,57 +109,27 @@ RUN set -eux; \
     echo "Set disable_coredump false" > /etc/sudo.conf
 
 ENV APP_USER=${APP_USER} \
-    VOLTA_HOME=/home/${APP_USER}/.volta \
     XDG_DATA_HOME=/home/${APP_USER}/.local/share \
     XDG_CONFIG_HOME=/home/${APP_USER}/.config \
     XDG_CACHE_HOME=/home/${APP_USER}/.cache \
     WORKDIR=${WORKDIR}
-ENV PATH=${VOLTA_HOME}/bin:/home/${APP_USER}/.bun/bin:/home/${APP_USER}/.local/bin:${PATH}
+ENV PATH=/home/${APP_USER}/.bun/bin:/home/${APP_USER}/.local/bin:${PATH}
 
 COPY --link conf.d/  /usr/local/etc/php/conf.d/
 COPY --link php-env.sh entrypoint.sh /usr/local/bin/
 
 USER ${UID}:${GID}
 
-ARG VOLTA_VERSION=2.0.2
-ARG NODE_VERSION=22.16.0
-ARG NPM_VERSION=11.7
-ARG FD_VERSION=10.3.0
-ARG FZF_VERSION=0.67.0
-
-RUN mkdir -p "$HOME/.local/bin" && touch "$HOME/.env-vars"
-
-RUN curl -fsSL https://get.volta.sh | bash -s -- --version "${VOLTA_VERSION}" --skip-setup \
-    && "$HOME/.volta/bin/volta" install "node@${NODE_VERSION}" "npm@${NPM_VERSION}"
-
-RUN curl -fsSL https://bun.com/install | bash
-
 RUN set -eux; \
-    cd /tmp; \
-    php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"; \
-    php -r "copy('https://composer.github.io/installer.sig', 'composer-setup.sig');"; \
-    php -r "\$sig = trim(file_get_contents('composer-setup.sig')); \
-            if (hash_file('sha384', 'composer-setup.php') !== \$sig) { \
-              unlink('composer-setup.php'); \
-              fwrite(STDERR, 'ERROR: Invalid installer signature'.PHP_EOL); \
-              exit(1); \
-            }"; \
-    php composer-setup.php --install-dir="$HOME/.local/bin" --filename=composer; \
-    rm -f composer-setup.php composer-setup.sig; \
-    composer --version
-
-RUN ARCH="$(dpkg --print-architecture)" \
-    && curl -fsSL "https://github.com/sharkdp/fd/releases/download/v${FD_VERSION}/fd-musl_${FD_VERSION}_${ARCH}.deb" \
-        -o /tmp/fd.deb \
-    && sudo dpkg -i /tmp/fd.deb \
-    && rm -f /tmp/fd.deb
-
-RUN ARCH="$(dpkg --print-architecture)" \
-    && curl -fsSL "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-linux_${ARCH}.tar.gz" \
-        -o /tmp/fzf.tgz \
-    && tar -xf /tmp/fzf.tgz -C /tmp \
-    && install -m 0755 /tmp/fzf "$HOME/.local/bin/fzf" \
-    && rm -f /tmp/fzf.tgz /tmp/fzf
+    mkdir -p "$HOME/.local/bin" && touch "$HOME/.env-vars" \
+    && ARCH="$(dpkg --print-architecture)" \
+    && case "$ARCH" in amd64) NODE_ARCH=x64;; arm64) NODE_ARCH=arm64;; esac \
+    && NODE_VERSION=$(curl -fsSL https://resolve-node.now.sh/lts) \
+    && curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
+        | tar -xJ --strip-components=1 -C "$HOME/.local" \
+    && npm install -g npm@latest \
+    && npm config set update-notifier false \
+    && curl -fsSL https://bun.com/install | bash
 
 WORKDIR ${WORKDIR}
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

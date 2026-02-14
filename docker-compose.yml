@@ -15,7 +15,6 @@ services:
                 APP_USER: ${APP_USER}
                 UID: ${UID}
                 GID: ${GID}
-                NODE_VERSION: ${NODE_VERSION}
                 WORKDIR: ${WORKDIR}
         depends_on:
             mariadb:
