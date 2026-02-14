@@ -63,6 +63,10 @@ Host redirection works on both native Linux (`/etc/hosts`) and WSL (Windows host
 
 The `franken_php` container is the main service — it runs Caddy as PID 1 with PHP 8.4, plus Node.js (Volta), Bun, Composer, and Supercronic. The `entrypoint.sh` handles Xdebug configuration and cron setup at container start. MariaDB uses a health check; the app service depends on it.
 
+## Code Style
+
+- **No comments in code.** Never add inline comments, block comments, or any other form of code commentary. The code must speak for itself through clear naming and structure. This applies to all file types (bash, YAML, Dockerfile, conf, etc.).
+
 ## Key Patterns
 
 - **Error handling**: `die()` for fatal errors (exits 1), `warn()` for non-fatal, `require_*()` for precondition checks
