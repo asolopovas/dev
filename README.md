@@ -75,6 +75,38 @@ redis/                  Cache service
 | `XDEBUG_MODE` | `off` | Xdebug mode |
 | `NODE_VERSION` | `22.16.0` | Node.js version |
 
+## Make Targets
+
+| Target | Description |
+|---|---|
+| `make build` | Build franken-php image |
+| `make push` | Build and push image to registry |
+| `make pull` | Pull image from registry |
+| `make up` | Start all services |
+| `make down` | Stop and remove containers |
+| `make stop` | Stop running containers |
+| `make restart` | Restart all services |
+| `make rebuild` | Rebuild and recreate containers |
+| `make rebuild-no-cache` | Full rebuild without cache |
+| `make ps` | Show container status |
+| `make logs` | Tail logs for all services |
+| `make logs-<service>` | Tail logs for a specific service |
+| `make health` | Show service health status |
+| `make top` | Display running processes |
+| `make shell` | Bash shell in franken_php |
+| `make fish` | Fish shell in franken_php |
+| `make mysql` | MySQL client as root |
+| `make redis-cli` | Redis CLI |
+| `make redis-flush` | Flush all Redis data |
+| `make redis-monitor` | Monitor Redis commands |
+| `make db-backup` | Dump all databases to db-backup.sql.gz |
+| `make db-restore` | Restore from db-backup.sql.gz |
+| `make clean` | Remove containers, networks, and volumes |
+| `make nuke` | Remove everything including images |
+| `make prune` | Remove dangling images and build cache |
+| `make install` | Symlink web CLI and fish completions |
+| `make test` | Run test suite |
+
 ## Requirements
 
 Docker, Docker Compose, jq, curl, tar, openssl. Fish shell optional for completions.
