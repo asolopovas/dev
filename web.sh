@@ -42,6 +42,7 @@ select_option() { local prompt="$1"; shift; ensure_gum && gum choose --header="$
 prompt_input()  { ensure_gum && gum input --prompt="$1: " --value="${2:-}"; }
 
 dc_action() {
+    require_docker
     local action="$1"; shift
     local services=("$@")
     local action_label spin_label
@@ -396,6 +397,7 @@ dc_live_action() {
 }
 
 dc_ps() {
+    require_docker
     if ! _has_gum; then $DC ps "$@"; return; fi
 
     local services=("$@")
@@ -796,6 +798,7 @@ remove_host_interactive() {
 }
 
 dc_build() {
+    require_docker
     local svc="${1:-}" cache="${2:-}"
     [[ "$cache" == "--no-cache" ]] || cache=""
     log "Building ${svc:-all services}..."
@@ -861,20 +864,20 @@ main() {
         restart)          dc_action restart "$@" ;;
         build)            dc_build "$@" ;;
         ps)               dc_ps "$@" ;;
-        log)              $DC logs -f "$@" ;;
+        log)              require_docker; $DC logs -f "$@" ;;
         new-host)         if [[ $# -eq 0 ]]; then new_host_wizard
                           else parse_new_host_args "$@"; new_host "$HOST" "$TYPE"; fi ;;
         remove-host)      if [[ $# -eq 0 ]]; then remove_host_interactive
                           else parse_new_host_args "$@"; confirm "Remove $HOST?" && { remove_host "$HOST"; build_webconf; }; fi ;;
         build-webconf)    build_webconf ;;
-        bash)             $DC exec franken_php bash ;;
-        fish)             $DC exec franken_php fish ;;
-        rootssl)          ssl_generate_root; spin "Restarting Caddy..." $DC restart franken_php ;;
+        bash)             require_docker; $DC exec franken_php bash ;;
+        fish)             require_docker; $DC exec franken_php fish ;;
+        rootssl)          require_docker; ssl_generate_root; spin "Restarting Caddy..." $DC restart franken_php ;;
         hostssl)          require_host "${1:-}" "hostssl"; ssl_generate_host "$1" ;;
         import-rootca)    ssl_import_root_to_chrome "$ROOT_CRT" ;;
-        redis-flush)      $DC exec redis redis-cli flushall ;;
-        redis-monitor)    $DC exec redis redis-cli monitor ;;
-        debug)            local mode="${1:-}"
+        redis-flush)      require_docker; $DC exec redis redis-cli flushall ;;
+        redis-monitor)    require_docker; $DC exec redis redis-cli monitor ;;
+        debug)            require_docker; local mode="${1:-}"
                           [[ -z "$mode" ]] && mode=$(select_option "Xdebug mode:" "off" "debug" "profile")
                           sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$mode/" "$SCRIPT_DIR/.env"; spin "Applying Xdebug mode: $mode..." $DC up -d franken_php ;;
         supervisor-init)  supervisor_init ;;
