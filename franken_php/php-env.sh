@@ -19,7 +19,3 @@ else
 fi
 
 sed -i "s/XDEBUG_IDEKEY/${XDEBUG_IDEKEY}/g;s/XDEBUG_HOST/${XDEBUG_HOST}/g;s/XDEBUG_MODE/${XDEBUG_MODE}/g;s/XDEBUG_TRIGGER/${XDEBUG_TRIGGER}/g" $PHP_INI_DIR/conf.d/xdebug.ini
-sed -i "s/upload_max_filesize = 2M/upload_max_filesize = 64M/g" $PHP_INI_DIR/php.ini
-sed -i "s/post_max_size = 8M/post_max_size = 64M/g" $PHP_INI_DIR/php.ini
-sed -i "s/memory_limit = 128M/memory_limit = 1024M/g" $PHP_INI_DIR/php.ini
-sed -i "s/max_execution_time = 30/max_execution_time = 60/g" $PHP_INI_DIR/php.ini

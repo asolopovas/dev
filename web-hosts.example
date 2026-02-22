@@ -1,7 +1,7 @@
 {
-    "output": "~/www/dev/nginx/sites/",
-    "template": "~/www/dev/nginx/template.conf",
-    "workdir": "/var/www",
+    "output": "~/www/dev/franken_php/config/sites/",
+    "template": "~/www/dev/franken_php/config/template.conf",
+    "WEB_ROOT": "/var/www",
     "hosts": [
         {
             "name": "example.test",

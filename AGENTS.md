@@ -10,10 +10,12 @@ This file provides guidance to AI coding agents when working with code in this r
 
 ### Testing
 ```bash
-make test          # run all tests
-bash tests.sh      # direct execution (equivalent)
+make test              # run unit tests
+make test-integration  # run integration tests (requires running services)
+make test-all          # run all tests
+bash tests.sh          # direct execution (equivalent to test-all)
 ```
-Tests use a custom bash test framework in `tests.sh` with `assert_eq`/`assert_contains` helpers. Each test gets an isolated temp directory via `setup_env`/`teardown_env`. To run a single test, edit the `tests` array at the bottom of `tests.sh`.
+Tests use [bats](https://github.com/bats-core/bats-core) (Bash Automated Testing System). Each test gets an isolated temp directory via `common_setup`/`common_teardown` in `tests/test_helper.bash`. Unit tests stub external dependencies (Docker, gum, host redirects) to run purely in-memory. Integration tests require running services.
 
 ### Common CLI Usage
 ```bash
@@ -72,4 +74,4 @@ The `franken_php` container is the main service — it runs Caddy as PID 1 with 
 - **Error handling**: `die()` for fatal errors (exits 1), `warn()` for non-fatal, `require_*()` for precondition checks
 - **Spin wrappers**: `spin "message" command args...` shows a gum spinner or falls back to plain logging
 - **Docker Compose**: all DC calls go through `$DC` variable (`docker compose -f $SCRIPT_DIR/docker-compose.yml`)
-- **Test isolation**: tests source `web.sh`, then stub out external dependencies (`_has_gum`, `select_option`, `spin`, `redirect_remove`, `db_remove`) to run purely in-memory
+- **Test isolation**: tests source `web.sh`, then stub out external dependencies (`_has_gum`, `select_option`, `spin`, `redirect_remove`, `redirect_add`, `db_remove`, `db_exists`, `db_create`) to run purely in-memory

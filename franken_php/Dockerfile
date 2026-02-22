@@ -156,7 +156,7 @@ RUN set -eux; \
     && NODE_VERSION=$(curl -fsSL https://resolve-node.now.sh/lts) \
     && curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
         | tar -xJ --strip-components=1 -C "$HOME/.local" \
-    && npm install -g npm@latest \
+    && npm install -g npm@latest @anthropic-ai/claude-code \
     && npm config set update-notifier false \
     && curl -fsSL https://bun.com/install | bash \
     && rm -rf "$HOME/.local/include" \

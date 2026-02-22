@@ -105,16 +105,14 @@ dc_service_snapshot() {
         return
     fi
 
-    local image state health status tcp_ports udp_ports
-    image=$(echo "$line" | jq -r '.Image // "-"')
-    state=$(echo "$line" | jq -r '.State // "unknown"')
-    health=$(echo "$line" | jq -r '.Health // ""')
-    status=$(echo "$line" | jq -r '.Status // "-"')
-    tcp_ports=$(echo "$line" | jq -r \
-        '[.Publishers[]? | select(.PublishedPort > 0 and .Protocol == "tcp") | .PublishedPort] | unique | sort | map(tostring) | join(",")')
-    udp_ports=$(echo "$line" | jq -r \
-        '[.Publishers[]? | select(.PublishedPort > 0 and .Protocol == "udp") | .PublishedPort] | unique | sort | map(tostring) | join(",")')
-    printf '%s%s%s%s%s%s%s%s%s%s%s\n' "$image" "$FS" "$status" "$FS" "$state" "$FS" "$health" "$FS" "$tcp_ports" "$FS" "$udp_ports"
+    echo "$line" | jq -r --arg fs "$FS" '[
+        (.Image // "-"),
+        (.Status // "-"),
+        (.State // "unknown"),
+        (.Health // ""),
+        ([.Publishers[]? | select(.PublishedPort > 0 and .Protocol == "tcp") | .PublishedPort] | unique | sort | map(tostring) | join(",")),
+        ([.Publishers[]? | select(.PublishedPort > 0 and .Protocol == "udp") | .PublishedPort] | unique | sort | map(tostring) | join(","))
+    ] | join($fs)'
 }
 
 dc_status_icon_live() {
@@ -149,10 +147,7 @@ dc_live_action() {
     local body_rows=0
 
     _repeat_char() {
-        local ch="$1" n="$2" out=""
-        local i
-        for ((i = 0; i < n; i++)); do out+="$ch"; done
-        printf '%s' "$out"
+        printf '%*s' "$2" '' | tr ' ' "$1"
     }
 
     _draw_border() {
@@ -462,7 +457,7 @@ hosts_json_ensure_defaults() {
 	    "hosts": []
 	}
 	ENDJSON
-    return 1
+    return 0
 }
 
 sanitize_db_identifier() {
@@ -622,7 +617,7 @@ redirect_remove() {
         _run_host_mapping_cmdlet "Remove-HostnameMapping" "$host" || { warn "Failed to remove host mapping for $host."; return 1; }
     else
         escaped="${host//./\\.}"
-        grep -q "$escaped" /etc/hosts 2>/dev/null && sudo sed -i.bak "/$escaped/d" /etc/hosts
+        grep -q "$escaped" /etc/hosts 2>/dev/null && sudo sed -i "/$escaped/d" /etc/hosts
     fi
 }
 

@@ -8,10 +8,6 @@ if [ -x "$HOME/dotfiles/scripts/ops-update-symlinks.sh" ]; then
     "$HOME/dotfiles/scripts/ops-update-symlinks.sh"
 fi
 
-if command -v npm >/dev/null 2>&1; then
-    command -v claude >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code || true
-fi
-
 CRONTAB_FILE="${CRONTAB_FILE:-}"
 if [ -z "$CRONTAB_FILE" ]; then
     for candidate in /var/www/dev/crontab /var/www/*/crontab /var/www/crontab; do
