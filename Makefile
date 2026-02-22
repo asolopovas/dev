@@ -2,7 +2,7 @@ IMAGE   ?= asolopovas/franken-php
 TAG     ?= latest
 DC      := docker compose
 
-.PHONY: help test build push pull \
+.PHONY: help test test-integration test-all lint build push pull \
         up down stop restart ps logs \
         shell fish mysql redis-cli \
         rebuild clean nuke \
@@ -98,5 +98,14 @@ install: ## Symlink web CLI and fish completions
 	ln -sf $(CURDIR)/web.completions.fish $(HOME)/.config/fish/completions/web.fish
 	@printf "Installed: web -> %s/web.sh\n" $(CURDIR)
 
-test: ## Run test suite
+test: ## Run unit tests
+	@bats tests/unit/
+
+test-integration: ## Run integration tests (requires running services)
+	@bats tests/integration/
+
+test-all: ## Run all tests (integration if services are up)
 	@bash tests.sh
+
+lint: ## Run shellcheck on web.sh
+	@shellcheck -x -e SC2086,SC2016,SC2034,SC2029,SC2120,SC2119,SC2318 -S warning web.sh
