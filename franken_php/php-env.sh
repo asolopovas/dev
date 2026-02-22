@@ -19,3 +19,8 @@ else
 fi
 
 sed -i "s/XDEBUG_IDEKEY/${XDEBUG_IDEKEY}/g;s/XDEBUG_HOST/${XDEBUG_HOST}/g;s/XDEBUG_MODE/${XDEBUG_MODE}/g;s/XDEBUG_TRIGGER/${XDEBUG_TRIGGER}/g" $PHP_INI_DIR/conf.d/xdebug.ini
+
+if [ "${XDEBUG_MODE}" = "off" ]; then
+    sed -i 's/^opcache\.jit=.*/opcache.jit=tracing/' $PHP_INI_DIR/conf.d/opcache.ini
+    sed -i 's/^opcache\.jit_buffer_size=.*/opcache.jit_buffer_size=64M/' $PHP_INI_DIR/conf.d/opcache.ini
+fi
