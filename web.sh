@@ -147,7 +147,8 @@ dc_live_action() {
     local body_rows=0
 
     _repeat_char() {
-        printf '%*s' "$2" '' | tr ' ' "$1"
+        local i
+        for ((i = 0; i < $2; i++)); do printf '%s' "$1"; done
     }
 
     _draw_border() {
