@@ -240,9 +240,6 @@ dc_live_action() {
     }
 
     _render_full_table() {
-        if [[ "$action" != "ps" ]]; then
-            printf '%s services (live):\n' "$action_label"
-        fi
         _draw_border "╭" "┬" "╮"
         _print_row "SERVICE" "IMAGE" "STATUS" "PORTS"
         _draw_border "├" "┼" "┤"
