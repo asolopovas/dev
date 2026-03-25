@@ -352,36 +352,34 @@ dc_live_action() {
         fi
         _refresh_all_rows
     else
+        declare -A pid_map
         for svc in "${services[@]}"; do
             status_map["$svc"]="$progress_label"
+            icon_map["$svc"]=$'\033[33m■\033[0m'
             _run_service_action "$svc" >/dev/null 2>&1 &
-            local pid=$!
+            pid_map["$svc"]=$!
+        done
 
-            while kill -0 "$pid" 2>/dev/null; do
-                icon_map["$svc"]=$'\033[33m■\033[0m'
-                status_map["$svc"]="$progress_label ${frames[$((frame_idx % ${#frames[@]}))]}"
-                frame_idx=$((frame_idx + 1))
-                _refresh_service_rows "$svc"
-                sleep 0.12
-            done
-
-            if wait "$pid"; then
-                _capture_service "$svc"
-                if [[ "$action" == "up" || "$action" == "restart" ]]; then
-                    local settle_tries=30
-                    while [[ "${health_map[$svc]}" == "starting" && $settle_tries -gt 0 ]]; do
-                        sleep 0.25
+        local running=1
+        while ((running)); do
+            running=0
+            for svc in "${services[@]}"; do
+                [[ -z "${pid_map[$svc]:-}" ]] && continue
+                if kill -0 "${pid_map[$svc]}" 2>/dev/null; then
+                    running=1
+                    status_map["$svc"]="$progress_label ${frames[$((frame_idx % ${#frames[@]}))]}"
+                else
+                    if wait "${pid_map[$svc]}" 2>/dev/null; then
                         _capture_service "$svc"
-                        _refresh_service_rows "$svc"
-                        settle_tries=$((settle_tries - 1))
-                    done
+                    else
+                        icon_map["$svc"]=$'\033[31m■\033[0m'
+                        status_map["$svc"]="$fail_label"
+                    fi
+                    _refresh_service_rows "$svc"
+                    pid_map["$svc"]=""
                 fi
-            else
-                icon_map["$svc"]=$'\033[31m■\033[0m'
-                status_map["$svc"]="$fail_label"
-            fi
-
-            _refresh_service_rows "$svc"
+            done
+            ((running)) && { frame_idx=$((frame_idx + 1)); _refresh_all_rows; sleep 0.12; }
         done
     fi
 
