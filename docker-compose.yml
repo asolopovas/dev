@@ -49,11 +49,7 @@ services:
             - db:/var/lib/mysql
             - ./mariadb/custom.cnf:/etc/mysql/conf.d/custom.cnf:ro
         healthcheck:
-            test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-            interval: 3s
-            timeout: 3s
-            retries: 3
-            start_period: 5s
+            disable: true
         networks:
             - dev_network
         ports:
@@ -66,11 +62,7 @@ services:
             - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
         command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
         healthcheck:
-            test: ["CMD", "redis-cli", "ping"]
-            interval: 3s
-            timeout: 3s
-            retries: 3
-            start_period: 3s
+            disable: true
         networks:
             - dev_network
         ports:
@@ -111,10 +103,6 @@ services:
             - ./typesense-data:/data
         command: '--data-dir /data --api-key=xyz --enable-cors'
         healthcheck:
-            test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8108'"]
-            interval: 3s
-            timeout: 3s
-            retries: 3
-            start_period: 5s
+            disable: true
         networks:
             - dev_network
