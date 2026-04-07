@@ -37,10 +37,12 @@ CONF
     [[ -n "$_old_errexit" ]] && set -o errexit
 
     _has_gum() { return 1; }
+    _HAS_GUM=0
     select_option() { printf 'off\n'; }
     spin() { "${@:2}"; }
     redirect_remove() { :; }
     redirect_add() { :; }
+    redirect_add_batch() { :; }
     db_remove() { :; }
     db_exists() { return 1; }
     db_create() { :; }

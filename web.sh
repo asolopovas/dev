@@ -294,32 +294,80 @@ _resolve_hosts_module_path() {
     echo "$_HOSTS_MODULE_PATH_CACHED"
 }
 
-_run_host_mapping_cmdlet() {
-    local cmdlet="$1" hostname="$2" module_path import_cmd
+_install_hosts_module() {
+    local ps; ps=$(powershell_exe)
+    log "Installing PowerShell Hosts module..."
+    "$ps" -NoProfile -Command "& {
+        \$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        \$cmd = 'Install-Module -Name Hosts -Scope CurrentUser -Force -AcceptLicense; Import-Module Hosts'
+        if (\$isAdmin) { Invoke-Expression \$cmd }
+        else { Start-Process -FilePath (Get-Process -Id \$PID).Path -Verb RunAs -Wait -ArgumentList '-NoProfile', '-Command', \$cmd }
+    }" || { warn "Failed to install Hosts module."; return 1; }
+    _HOSTS_MODULE_PATH_CACHED=""
+    rm -f "$(_hosts_module_cache_file)" 2>/dev/null
+    _resolve_hosts_module_path >/dev/null
+}
+
+_run_host_mapping_cmdlet_batch() {
+    local cmdlet="$1"; shift
+    (($# == 0)) && return 0
+    local module_path import_cmd ps_cmd
     module_path=$(_resolve_hosts_module_path)
+    if [[ -z "$module_path" ]]; then
+        confirm "PowerShell Hosts module not found. Install it now?" && _install_hosts_module
+        module_path=$(_resolve_hosts_module_path)
+    fi
     [[ -n "$module_path" ]] \
         && import_cmd="Import-Module '$(wslpath -w "$module_path")' -ErrorAction Stop" \
         || import_cmd="Import-Module Hosts -ErrorAction Stop"
+
+    ps_cmd="$import_cmd"
+    local h
+    for h in "$@"; do
+        ps_cmd="${ps_cmd}; ${cmdlet} '${h}'"
+    done
+
     "$(powershell_exe)" -NoProfile -Command "& {
-        $import_cmd
         \$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-        if (\$isAdmin) { ${cmdlet} '${hostname}' }
-        else { Start-Process -FilePath (Get-Process -Id \$PID).Path -Verb RunAs -Wait -ArgumentList '-NoProfile', '-Command', \"$import_cmd; ${cmdlet} '${hostname}'\" }
+        if (\$isAdmin) { ${ps_cmd} }
+        else { Start-Process -FilePath (Get-Process -Id \$PID).Path -Verb RunAs -Wait -ArgumentList '-NoProfile', '-Command', \"${ps_cmd}\" }
     }"
+}
+
+_redirect_exists() {
+    local host="$1" escaped="${1//./\\.}"
+    if is_wsl; then
+        grep -qP "^\s*127\.0\.0\.1.*${escaped}(?:\s+|$)" "/mnt/c/Windows/System32/drivers/etc/hosts" 2>/dev/null
+    else
+        grep -qE "^[^#]*[[:space:]]${escaped}([[:space:]]|$)" /etc/hosts 2>/dev/null
+    fi
 }
 
 redirect_add() {
     local host="$1"
+    _redirect_exists "$host" && return 0
+    log "Adding host redirection for \"$host\""
     if is_wsl; then
-        local escaped="${host//./\\.}"
-        grep -qP "^\s*127\.0\.0\.1.*${escaped}(?:\s+|$)" "/mnt/c/Windows/System32/drivers/etc/hosts" 2>/dev/null && return 0
-        log "Adding host redirection for \"$host\""
-        _run_host_mapping_cmdlet "New-HostnameMapping" "$host" || { warn "Failed to add host mapping for $host."; return 1; }
+        _run_host_mapping_cmdlet_batch "New-HostnameMapping" "$host" || { warn "Failed to add host mapping for $host."; return 1; }
     else
-        local escaped="${host//./\\.}"
-        grep -qE "^[^#]*[[:space:]]${escaped}([[:space:]]|$)" /etc/hosts 2>/dev/null && return 0
-        log "Adding host redirection for \"$host\""
         echo "127.0.0.1 $host" | sudo tee -a /etc/hosts >/dev/null
+    fi
+}
+
+redirect_add_batch() {
+    local pending=()
+    local h
+    for h in "$@"; do
+        _redirect_exists "$h" || pending+=("$h")
+    done
+    ((${#pending[@]} == 0)) && return 0
+    log "Adding host redirections: ${pending[*]}"
+    if is_wsl; then
+        _run_host_mapping_cmdlet_batch "New-HostnameMapping" "${pending[@]}" || { warn "Failed to add host mappings."; return 1; }
+    else
+        local lines=""
+        for h in "${pending[@]}"; do lines+="127.0.0.1 $h"$'\n'; done
+        printf '%s' "$lines" | sudo tee -a /etc/hosts >/dev/null
     fi
 }
 
@@ -327,7 +375,7 @@ redirect_remove() {
     local host="$1" escaped
     log "Removing host redirection for \"$host\""
     if is_wsl; then
-        _run_host_mapping_cmdlet "Remove-HostnameMapping" "$host" || { warn "Failed to remove host mapping for $host."; return 1; }
+        _run_host_mapping_cmdlet_batch "Remove-HostnameMapping" "$host" || { warn "Failed to remove host mapping for $host."; return 1; }
     else
         escaped="${host//./\\.}"
         grep -q "$escaped" /etc/hosts 2>/dev/null && sudo sed -i "/$escaped/d" /etc/hosts
@@ -337,8 +385,12 @@ redirect_remove() {
 build_webconf() {
     hosts_json_ensure_defaults || return 1
     find "$BACKEND_SITES_DIR" -type f ! -name 'phpmyadmin.test.conf' ! -name '.gitkeep' -delete
+
+    local all_hosts=("phpmyadmin.test")
+    mapfile -t -O 1 all_hosts < <(hosts_json_query -r '.hosts[].name')
+    redirect_add_batch "${all_hosts[@]}"
+
     if ! jq -e '.hosts[] | select(.name == "phpmyadmin.test")' "$HOSTS_JSON" >/dev/null 2>&1; then
-        redirect_add "phpmyadmin.test"
         ssl_generate_host "phpmyadmin.test"
     fi
 
@@ -355,7 +407,6 @@ build_webconf() {
         [[ "$host_type" == wp || "$host_type" == wordpress ]] && \
             echo "* * * * * cd $serve_root && php $serve_root/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2" >> "$SCRIPT_DIR/crontab"
 
-        redirect_add "$host_name"
         ssl_generate_host "$host_name"
         [[ "$host_type" == "laravel" ]] && serve_root="$serve_root/public"
 
