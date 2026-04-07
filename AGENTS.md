@@ -4,18 +4,22 @@ This file provides guidance to AI coding agents when working with code in this r
 
 ## Project Overview
 
-**web.sh** is a Docker-based PHP development environment for local WordPress and Laravel development. It orchestrates FrankenPHP (Caddy + PHP 8.4), MariaDB, Redis, PhpMyAdmin, Mailhog, and Typesense via Docker Compose, with automated SSL, host redirection, database provisioning, and project scaffolding through a single CLI.
+**web.sh** is a Docker-based PHP development environment for local WordPress and Laravel development. It orchestrates FrankenPHP (Caddy + PHP 8.4), MariaDB, Redis, PhpMyAdmin, Mailpit, and Typesense via Docker Compose, with automated SSL, host redirection, database provisioning, and project scaffolding through a single CLI.
 
 ## Commands
 
-### Testing
+### Testing & Lint
 ```bash
-make test              # run unit tests
-make test-integration  # run integration tests (requires running services)
-make test-all          # run all tests
-bash tests.sh          # direct execution (equivalent to test-all)
+make test                       # unit tests only (bats tests/unit/)
+make test-integration           # integration tests (requires services running)
+make test-all                   # tests.sh: unit + integration if franken_php is up
+make lint                       # shellcheck with project-specific exclusions
+bats tests/unit/main.bats       # run a single test file
+bats -f "main help" tests/unit/ # filter by test name
 ```
-Tests use [bats](https://github.com/bats-core/bats-core) (Bash Automated Testing System). Each test gets an isolated temp directory via `common_setup`/`common_teardown` in `tests/test_helper.bash`. Unit tests stub external dependencies (Docker, gum, host redirects) to run purely in-memory. Integration tests require running services.
+CI runs `make lint` then `make test` on push/PR to `main` (`.github/workflows/ci.yml`). The lint target disables specific shellcheck codes (`SC2086,SC2016,SC2034,SC2029,SC2120,SC2119,SC2318`) — match those exclusions when adding new code.
+
+Tests use [bats](https://github.com/bats-core/bats-core). `tests/test_helper.bash` sources `web.sh` (via the `BASH_SOURCE != $0` guard at the bottom of `web.sh`), redirects all path globals (`SCRIPT_DIR`, `WEB_ROOT`, `BACKEND_*`, `HOSTS_JSON`, `CERTS_DIR`, `SUPERVISOR_DIR`) into a temp dir, and overrides these stubs after sourcing: `_has_gum`, `select_option`, `spin`, `redirect_remove`, `redirect_add`, `db_remove`, `db_exists`, `db_create`. New unit tests must work with these stubs — never call real Docker or touch `/etc/hosts`.
 
 ### Common CLI Usage
 ```bash
@@ -29,13 +33,11 @@ Tests use [bats](https://github.com/bats-core/bats-core) (Bash Automated Testing
 ./web.sh bash                            # shell into container
 ```
 
-No linter is configured. Use `shellcheck web.sh` for static analysis if needed.
-
 ## Architecture
 
-### Single-script CLI (`web.sh`, ~900 lines)
+### Single-script CLI (`web.sh`)
 
-All logic lives in one bash script with `set -o errexit` and `set -o pipefail`. The `main()` function at line ~863 dispatches commands via a `case` statement. The script can be both executed directly and sourced (for testing) — controlled by the `if [[ "${BASH_SOURCE[0]}" == "$0" ]]` guard at the end.
+All logic lives in one bash script (~888 lines) with `set -o errexit` and `set -o pipefail`. The `main()` function dispatches commands via a `case` statement. The script can be both executed directly and sourced (for testing) — controlled by the `if [[ "${BASH_SOURCE[0]}" == "$0" ]]` guard at the end. Do not break that guard or tests will execute `main` on source.
 
 ### Configuration-driven host management
 
