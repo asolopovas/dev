@@ -47,357 +47,59 @@ dc_action() {
     require_docker
     local action="$1"; shift
     local services=("$@")
-    local action_label spin_label
+    local label
 
     case "$action" in
-        up)      action_label="Starting"  ; spin_label="Starting services..."  ;;
-        down)    action_label="Stopping"  ; spin_label="Stopping services..."  ;;
-        stop)    action_label="Stopping"  ; spin_label="Stopping services..."  ;;
-        restart) action_label="Restarting"; spin_label="Restarting services..." ;;
-        *)       action_label="Running"   ; spin_label="Running $action..."    ;;
+        up)      label="Starting services..."   ;;
+        down)    label="Stopping services..."   ;;
+        stop)    label="Stopping services..."   ;;
+        restart) label="Restarting services..." ;;
+        *)       label="Running $action..."     ;;
     esac
 
-    if [[ ${#services[@]} -eq 0 ]]; then
-        mapfile -t services < <($DC config --services 2>/dev/null)
-    fi
-
-    if _has_gum && [[ "$action" == "restart" || "$action" == "up" || "$action" == "stop" || "$action" == "down" ]]; then
-        :
-    elif _has_gum; then
-        local svc_list=""
-        for svc in "${services[@]}"; do svc_list+="  • $svc"$'\n'; done
-        gum style --bold --foreground 212 "$action_label:"
-        printf '%s' "$svc_list"
-    else
-        log "$action_label: ${services[*]}"
-    fi
-
     case "$action" in
-        restart|up|stop|down)
-            if _has_gum; then
-                dc_live_action "$action" "${services[@]}"
-            else
-                case "$action" in
-                    down) spin "$spin_label" $DC down ;;
-                    up)   spin "$spin_label" $DC up -d "${services[@]}" ;;
-                    *)    spin "$spin_label" $DC "$action" "${services[@]}" ;;
-                esac
-            fi
+        down)
+            ((${#services[@]} > 0)) && die "down operates on the entire stack. Use \`web stop <service>\` instead."
+            spin "$label" $DC down
             ;;
-        *)    spin "$spin_label" $DC "$action" "${services[@]}" ;;
+        up)
+            spin "$label" $DC up -d "${services[@]}"
+            ;;
+        *)
+            spin "$label" $DC "$action" "${services[@]}"
+            ;;
     esac
 
-    if ! { _has_gum && [[ "$action" == "restart" || "$action" == "up" || "$action" == "stop" || "$action" == "down" ]]; }; then
-        echo ""
-        dc_ps "${services[@]}"
-    fi
+    [[ "$action" == "down" ]] && return 0
+    echo ""
+    dc_ps "${services[@]}"
 }
 
-dc_service_snapshot() {
-    local svc="$1"
-    local FS=$'\x1f'
-    local line=""
-    while IFS= read -r l; do
-        line="$l"
-        break
-    done < <($DC ps --format json "$svc" 2>/dev/null)
-
-    if [[ -z "$line" ]]; then
-        printf '%s%s%s%s%s%s%s%s%s%s%s\n' "-" "$FS" "not running" "$FS" "" "$FS" "" "$FS" "" "$FS" ""
-        return
-    fi
-
-    echo "$line" | jq -r --arg fs "$FS" '[
-        (.Image // "-"),
-        (.Status // "-"),
-        (.State // "unknown"),
-        (.Health // ""),
-        ([.Publishers[]? | select(.PublishedPort > 0 and .Protocol == "tcp") | .PublishedPort] | unique | sort | map(tostring) | join(",")),
-        ([.Publishers[]? | select(.PublishedPort > 0 and .Protocol == "udp") | .PublishedPort] | unique | sort | map(tostring) | join(","))
-    ] | join($fs)'
-}
-
-dc_status_icon_live() {
-    local state="$1" health="$2"
-    if [[ "$state" == "running" ]]; then
-        [[ "$health" == "healthy" || -z "$health" ]] && { printf '\033[32m■\033[0m'; return; }
-        printf '\033[33m■\033[0m'
-        return
-    fi
-    [[ "$state" == "exited" || "$state" == "dead" ]] && { printf '\033[31m■\033[0m'; return; }
-    printf '\033[37m■\033[0m'
-}
-
-dc_live_action() {
-    local action="$1"; shift
-    local services=("$@")
-    local -a frames=("-" "\\" "|" "/")
-    local frame_idx=0
-    local W_SERVICE=14 W_IMAGE=30 W_STATUS=24 W_PORTS=24
-    local cursor_hidden=0
-    local action_label progress_label fail_label
-
-    case "$action" in
-        restart) action_label="Restarting"; progress_label="Restarting..."; fail_label="Restart failed" ;;
-        up)      action_label="Starting"  ; progress_label="Starting..."  ; fail_label="Start failed" ;;
-        stop|down) action_label="Stopping"; progress_label="Stopping..."   ; fail_label="Stop failed" ;;
-        ps)      action_label="Service"   ; progress_label=""              ; fail_label="" ;;
-        *)       action_label="Running"   ; progress_label="Running..."    ; fail_label="Action failed" ;;
-    esac
-
-    declare -A image_map status_map state_map health_map tcp_map udp_map icon_map row_offset has_status_row has_ports_row
-    local body_rows=0
-
-    _repeat_char() {
-        local i
-        for ((i = 0; i < $2; i++)); do printf '%s' "$1"; done
-    }
-
-    _draw_border() {
-        local left="$1" mid="$2" right="$3"
-        printf '%s' "$left"
-        printf '%s' "$(_repeat_char '─' $((W_SERVICE + 2)))"
-        printf '%s' "$mid"
-        printf '%s' "$(_repeat_char '─' $((W_IMAGE + 2)))"
-        printf '%s' "$mid"
-        printf '%s' "$(_repeat_char '─' $((W_STATUS + 2)))"
-        printf '%s' "$mid"
-        printf '%s' "$(_repeat_char '─' $((W_PORTS + 2)))"
-        printf '%s\n' "$right"
-    }
-
-    _print_row() {
-        local c1="$1" c2="$2" c3="$3" c4="$4"
-        printf '│ %-*.*s │ %-*.*s │ %-*.*s │ %-*.*s │\n' \
-            "$W_SERVICE" "$W_SERVICE" "$c1" \
-            "$W_IMAGE" "$W_IMAGE" "$c2" \
-            "$W_STATUS" "$W_STATUS" "$c3" \
-            "$W_PORTS" "$W_PORTS" "$c4"
-    }
-
-    _print_service_row() {
-        local icon="$1" service="$2" c2="$3" c3="$4" c4="$5"
-        local name_width=$((W_SERVICE - 2))
-        ((name_width < 1)) && name_width=1
-        printf '│ %s %-*.*s │ %-*.*s │ %-*.*s │ %-*.*s │\n' \
-            "$icon" "$name_width" "$name_width" "$service" \
-            "$W_IMAGE" "$W_IMAGE" "$c2" \
-            "$W_STATUS" "$W_STATUS" "$c3" \
-            "$W_PORTS" "$W_PORTS" "$c4"
-    }
-
-    _wrap_status_two_lines() {
-        local status="$1"
-        local -n out1_ref="$2"
-        local -n out2_ref="$3"
-        local head tail
-
-        out1_ref="$status"
-        out2_ref=""
-
-        ((${#status} <= W_STATUS)) && return
-
-        head="${status:0:W_STATUS}"
-        tail="${status:W_STATUS}"
-
-        if [[ "$head" == *" "* ]]; then
-            out1_ref="${head% *}"
-            tail="${status:${#out1_ref}}"
-            tail="${tail# }"
-        else
-            out1_ref="$head"
-        fi
-
-        out2_ref="${tail:0:W_STATUS}"
-    }
-
-    _wrap_ports_two_lines() {
-        local service="$1"
-        local -n out1_ref="$2"
-        local -n out2_ref="$3"
-
-        out1_ref="-"
-        out2_ref=""
-
-        if [[ -n "${tcp_map[$service]}" && -n "${udp_map[$service]}" ]]; then
-            out1_ref="tcp: ${tcp_map[$service]}"
-            out2_ref="udp: ${udp_map[$service]}"
-        elif [[ -n "${tcp_map[$service]}" ]]; then
-            out1_ref="tcp: ${tcp_map[$service]}"
-        elif [[ -n "${udp_map[$service]}" ]]; then
-            out1_ref="udp: ${udp_map[$service]}"
-        fi
-    }
-
-    _render_body() {
-        local service primary_ports secondary_ports status_line_1 status_line_2
-        for service in "${services[@]}"; do
-            _wrap_ports_two_lines "$service" primary_ports secondary_ports
-            _wrap_status_two_lines "${status_map[$service]}" status_line_1 status_line_2
-            _print_service_row "${icon_map[$service]}" "$service" "${image_map[$service]}" "$status_line_1" "$primary_ports"
-            if [[ "${has_status_row[$service]}" == "1" || "${has_ports_row[$service]}" == "1" ]]; then
-                _print_row "" "" "$status_line_2" "$secondary_ports"
-            fi
-        done
-    }
-
-    _render_full_table() {
-        _draw_border "╭" "┬" "╮"
-        _print_row "SERVICE" "IMAGE" "STATUS" "PORTS"
-        _draw_border "├" "┼" "┤"
-        _render_body
-        _draw_border "╰" "┴" "╯"
-    }
-
-    _refresh_service_rows() {
-        local service="$1"
-        local row="${row_offset[$service]}"
-        local row_count=1
-        local up down
-        local primary_ports="-"
-        local secondary_ports=""
-        local status_line_1 status_line_2
-
-        _wrap_ports_two_lines "$service" primary_ports secondary_ports
-        _wrap_status_two_lines "${status_map[$service]}" status_line_1 status_line_2
-
-        if [[ "${has_status_row[$service]}" == "1" || "${has_ports_row[$service]}" == "1" ]]; then
-            row_count=2
-        fi
-
-        up=$((body_rows - row + 1))
-        ((up > 0)) && printf '\033[%sA' "$up"
-        printf '\r'
-        _print_service_row "${icon_map[$service]}" "$service" "${image_map[$service]}" "$status_line_1" "$primary_ports"
-        if [[ "${has_status_row[$service]}" == "1" || "${has_ports_row[$service]}" == "1" ]]; then
-            printf '\r'
-            _print_row "" "" "$status_line_2" "$secondary_ports"
-        fi
-
-        down=$((body_rows - row - row_count + 1))
-        ((down > 0)) && printf '\033[%sB' "$down"
-    }
-
-    _refresh_all_rows() {
-        local service
-        for service in "${services[@]}"; do _refresh_service_rows "$service"; done
-    }
-
-    _capture_service() {
-        local service="$1"
-        local snap image status state health tcp_ports udp_ports
-        snap=$(dc_service_snapshot "$service")
-        IFS=$'\x1f' read -r image status state health tcp_ports udp_ports <<< "$snap"
-        image_map["$service"]="$image"
-        status_map["$service"]="$status"
-        state_map["$service"]="$state"
-        health_map["$service"]="$health"
-        tcp_map["$service"]="$tcp_ports"
-        udp_map["$service"]="$udp_ports"
-        icon_map["$service"]=$(dc_status_icon_live "$state" "$health")
-    }
-
-    _run_service_action() {
-        local service="$1"
-        case "$action" in
-            restart) $DC restart "$service" >/dev/null 2>&1 ;;
-            up)      $DC up -d "$service" >/dev/null 2>&1 ;;
-            stop)    $DC stop "$service" >/dev/null 2>&1 ;;
-            *)       return 1 ;;
-        esac
-    }
-
-    local svc
-    for svc in "${services[@]}"; do
-        _capture_service "$svc"
-        row_offset["$svc"]="$body_rows"
-        has_status_row["$svc"]=0
-        has_ports_row["$svc"]=0
-        ((${#status_map[$svc]} > W_STATUS)) && has_status_row["$svc"]=1
-        [[ -n "${tcp_map[$svc]}" && -n "${udp_map[$svc]}" ]] && has_ports_row["$svc"]=1
-        ((body_rows += 1))
-        [[ "${has_status_row[$svc]}" == "1" || "${has_ports_row[$svc]}" == "1" ]] && ((body_rows += 1))
-    done
-
-    _render_full_table
-    if [[ "$action" == "ps" ]]; then
-        printf '\n'
-        return
-    fi
-    printf '\033[?25l'
-    cursor_hidden=1
-
-    if [[ "$action" == "down" ]]; then
-        for svc in "${services[@]}"; do
-            icon_map["$svc"]=$'\033[33m■\033[0m'
-            status_map["$svc"]="$progress_label"
-        done
-        $DC down >/dev/null 2>&1 &
-        local pid=$!
-
-        while kill -0 "$pid" 2>/dev/null; do
-            for svc in "${services[@]}"; do
-                status_map["$svc"]="$progress_label ${frames[$((frame_idx % ${#frames[@]}))]}"
-            done
-            frame_idx=$((frame_idx + 1))
-            _refresh_all_rows
-            sleep 0.12
-        done
-
-        if wait "$pid"; then
-            for svc in "${services[@]}"; do _capture_service "$svc"; done
-        else
-            for svc in "${services[@]}"; do
-                icon_map["$svc"]=$'\033[31m■\033[0m'
-                status_map["$svc"]="$fail_label"
-            done
-        fi
-        _refresh_all_rows
-    else
-        declare -A pid_map
-        for svc in "${services[@]}"; do
-            status_map["$svc"]="$progress_label"
-            icon_map["$svc"]=$'\033[33m■\033[0m'
-            _run_service_action "$svc" >/dev/null 2>&1 &
-            pid_map["$svc"]=$!
-        done
-
-        local running=1
-        while ((running)); do
-            running=0
-            for svc in "${services[@]}"; do
-                [[ -z "${pid_map[$svc]:-}" ]] && continue
-                if kill -0 "${pid_map[$svc]}" 2>/dev/null; then
-                    running=1
-                    status_map["$svc"]="$progress_label ${frames[$((frame_idx % ${#frames[@]}))]}"
-                else
-                    if wait "${pid_map[$svc]}" 2>/dev/null; then
-                        _capture_service "$svc"
-                    else
-                        icon_map["$svc"]=$'\033[31m■\033[0m'
-                        status_map["$svc"]="$fail_label"
-                    fi
-                    _refresh_service_rows "$svc"
-                    pid_map["$svc"]=""
-                fi
-            done
-            ((running)) && { frame_idx=$((frame_idx + 1)); _refresh_all_rows; sleep 0.12; }
-        done
-    fi
-
-    ((cursor_hidden == 1)) && printf '\033[?25h'
-    printf '\n'
+_dc_ps_render_gum() {
+    local json
+    json=$($DC ps --format json --all "$@" 2>/dev/null) || return 1
+    [[ -z "$json" ]] && return 0
+    {
+        printf 'SERVICE\tIMAGE\tSTATUS\tPORTS\n'
+        printf '%s\n' "$json" | jq -r '
+            [
+                (.Service // "-"),
+                (.Image // "-"),
+                (.Status // "-"),
+                ([.Publishers[]? | select(.PublishedPort > 0)
+                    | "\(.PublishedPort)/\(.Protocol)"]
+                  | unique | join(",") | if . == "" then "-" else . end)
+            ] | @tsv
+        '
+    } | gum table -s $'\t' -p
 }
 
 dc_ps() {
     require_docker
-    if ! _has_gum; then $DC ps "$@"; return; fi
-
-    local services=("$@")
-    if [[ ${#services[@]} -eq 0 ]]; then
-        mapfile -t services < <($DC config --services 2>/dev/null)
+    if ((_HAS_GUM)) && command -v jq &>/dev/null; then
+        _dc_ps_render_gum "$@" && return 0
     fi
-    dc_live_action ps "${services[@]}"
+    $DC ps "$@"
 }
 
 new_host_wizard() {
@@ -868,7 +570,7 @@ main() {
     local cmd="${1:-help}"; shift 2>/dev/null || true
     case "$cmd" in
         up)               dc_action up "$@" ;;
-        down)             dc_action down ;;
+        down)             dc_action down "$@" ;;
         stop)             dc_action stop "$@" ;;
         restart)          dc_action restart "$@" ;;
         build)            dc_build "$@" ;;
