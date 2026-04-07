@@ -32,7 +32,8 @@ RUN docker-php-ext-configure gd \
 
 RUN pecl install apcu igbinary imagick redis xdebug \
     && docker-php-ext-enable apcu igbinary imagick redis xdebug \
-    && pecl clear-cache
+    && pecl clear-cache \
+    && find /usr/local/lib/php/extensions -name '*.so' -exec strip --strip-unneeded {} +
 
 FROM composer:2 AS composer-stage
 
@@ -110,7 +111,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         sudo \
         unzip \
         xz-utils \
-    && ARCH="$(dpkg --print-architecture)" \
+    && rm -rf /usr/share/doc/* /usr/share/man/*
+
+RUN set -eux; \
+    ARCH="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.bookworm_${ARCH}.deb" \
         -o /tmp/wkhtmltox.deb \
     && dpkg --force-depends -i /tmp/wkhtmltox.deb \
@@ -125,15 +129,20 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         -o /tmp/fzf.tgz \
     && tar -xf /tmp/fzf.tgz -C /usr/local/bin \
     && chmod 0755 /usr/local/bin/fzf \
-    && rm -rf /tmp/* /var/tmp/* /usr/share/doc/* /usr/share/man/* \
-    && (groupadd -g "${GID}" "${APP_USER}" || true) \
+    && rm -rf /tmp/* /var/tmp/*
+
+RUN set -eux; \
+    (groupadd -g "${GID}" "${APP_USER}" || true) \
     && useradd -m -u "${UID}" -g "${GID}" -s /bin/bash "${APP_USER}" \
     && setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp \
     && chown -R "${UID}:${GID}" /data/caddy /config/caddy \
     && mkdir -p /etc/sudoers.d \
     && echo "${APP_USER} ALL=(ALL) NOPASSWD: ALL" > "/etc/sudoers.d/${APP_USER}" \
     && chmod 0440 "/etc/sudoers.d/${APP_USER}" \
-    && echo "Set disable_coredump false" > /etc/sudo.conf
+    && echo "Set disable_coredump false" > /etc/sudo.conf \
+    && mkdir -p /var/www/xdebug \
+    && touch /var/log/xdebug.log /var/www/access.log \
+    && chown -R "${UID}:${GID}" /var/www/xdebug /var/log/xdebug.log /var/www/access.log
 
 ENV PHP_INI_DIR=/usr/local/etc/php \
     GODEBUG=cgocheck=0 \
@@ -158,7 +167,7 @@ RUN set -eux; \
     && NODE_VERSION=$(curl -fsSL https://resolve-node.now.sh/lts) \
     && curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
         | tar -xJ --strip-components=1 -C "$HOME/.local" \
-    && npm install -g npm@latest @anthropic-ai/claude-code \
+    && npm install -g npm@latest \
     && npm config set update-notifier false \
     && curl -fsSL https://bun.com/install | bash \
     && rm -rf "$HOME/.local/include" \

@@ -13,3 +13,4 @@ build.log
 templates.yml
 *.log
 crontab
+web-hosts.json
