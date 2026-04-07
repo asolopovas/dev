@@ -8,7 +8,7 @@ franken_php/config/ssl/**
 !franken_php/config/ssl/.gitkeep
 typesense-data/*
 db/*.sql
-web-hosts.json
+db-backup.sql.gz
 build.log
 templates.yml
 *.log

@@ -494,7 +494,13 @@ SSL:
   hostssl <host>                Generate host SSL
   import-rootca                 Import root CA to Chrome
 
+Database:
+  mysql                         MySQL client as root
+  db-backup                     Dump all databases to db-backup.sql.gz
+  db-restore                    Restore from db-backup.sql.gz
+
 Tools:
+  redis-cli                     Redis CLI shell
   redis-flush                   Flush Redis
   redis-monitor                 Monitor Redis
   debug [off|debug|profile]     Set Xdebug mode (interactive if omitted)
@@ -523,6 +529,15 @@ main() {
         rootssl)          require_docker; ssl_generate_root; spin "Restarting Caddy..." $DC restart franken_php ;;
         hostssl)          require_host "${1:-}" "hostssl"; ssl_generate_host "$1" ;;
         import-rootca)    ssl_import_root_to_chrome "$ROOT_CRT" ;;
+        mysql)            require_docker; $DC exec -e MYSQL_PWD=secret mariadb mariadb -uroot ;;
+        db-backup)        require_docker
+                          $DC exec -T -e MYSQL_PWD=secret mariadb mariadb-dump -uroot --all-databases | gzip > "$SCRIPT_DIR/db-backup.sql.gz"
+                          info "Backed up to $SCRIPT_DIR/db-backup.sql.gz" ;;
+        db-restore)       require_docker
+                          [[ -f "$SCRIPT_DIR/db-backup.sql.gz" ]] || die "db-backup.sql.gz not found"
+                          gunzip -c "$SCRIPT_DIR/db-backup.sql.gz" | $DC exec -T -e MYSQL_PWD=secret mariadb mariadb -uroot
+                          info "Restore complete" ;;
+        redis-cli)        require_docker; $DC exec redis redis-cli ;;
         redis-flush)      require_docker; $DC exec redis redis-cli flushall ;;
         redis-monitor)    require_docker; $DC exec redis redis-cli monitor ;;
         debug)            require_docker; local mode="${1:-}"
