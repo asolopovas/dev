@@ -16,25 +16,27 @@ DC="docker compose -f $SCRIPT_DIR/docker-compose.yml"
 SUPERVISOR_DIR="${SUPERVISOR_DIR:-$HOME/supervisor}"
 KNOWN_SLDS="co.uk gov.uk com.br co.jp"
 _HOSTS_MODULE_PATH_CACHED="" _IS_WSL=""
+command -v gum &>/dev/null && _HAS_GUM=1 || _HAS_GUM=0
 
-_has_gum() { command -v gum &>/dev/null; }
-die()  { if _has_gum; then gum log --level error "$1" >&2; else printf '\033[31mError: %s\033[0m\n' "$1" >&2; fi; exit 1; }
-warn() { if _has_gum; then gum log --level warn "$1" >&2; else printf '\033[0;33m%s\033[0m\n' "$1" >&2; fi; }
-info() { if _has_gum; then gum log --level info "$1"; else printf '\033[0;32m%s\033[0m\n' "$1"; fi; }
-log()  { if _has_gum; then gum log --level debug "$1"; else printf '%s\n' "$1"; fi; }
-spin() { if _has_gum; then gum spin --spinner dot --title "$1" -- "${@:2}"; else log "$1"; "${@:2}"; fi; }
+_has_gum() { ((_HAS_GUM)); }
+die()  { if ((_HAS_GUM)); then gum log --level error "$1" >&2; else printf '\033[31mError: %s\033[0m\n' "$1" >&2; fi; exit 1; }
+warn() { if ((_HAS_GUM)); then gum log --level warn "$1" >&2; else printf '\033[0;33m%s\033[0m\n' "$1" >&2; fi; }
+info() { if ((_HAS_GUM)); then gum log --level info "$1"; else printf '\033[0;32m%s\033[0m\n' "$1"; fi; }
+log()  { if ((_HAS_GUM)); then gum log --level debug "$1"; else printf '%s\n' "$1"; fi; }
+spin() { if ((_HAS_GUM)); then gum spin --spinner dot --title "$1" -- "${@:2}"; else log "$1"; "${@:2}"; fi; }
 
 require_cmd()    { command -v "$1" &>/dev/null || die "$1 is not installed."; }
 require_host()   { [[ -n "${1:-}" ]] || die "No hostname specified. Usage: web $2 <hostname>"; }
 require_docker() { require_cmd docker; docker info &>/dev/null || die "Docker daemon is not running."; }
 ensure_jq()      { command -v jq &>/dev/null || { log "Installing jq..."; sudo apt update && sudo apt install -y jq; }; }
 ensure_gum() {
-    command -v gum &>/dev/null && return 0
+    ((_HAS_GUM)) && return 0
     log "Installing gum..."
     sudo mkdir -p /etc/apt/keyrings
     curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
     echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
     sudo apt update && sudo apt install -y gum
+    _HAS_GUM=1
 }
 
 confirm()       { ensure_gum && gum confirm "$1"; }
@@ -498,7 +500,7 @@ db_create() {
     local db; db=$(hosts_json_get_db "$1")
     [[ -z "$db" ]] && die "No database configured for host $1"
     log "Creating database and user: $db"
-    $DC exec -T mariadb mariadb -uroot -psecret -e \
+    $DC exec -T -e MYSQL_PWD=secret mariadb mariadb -uroot -e \
         "CREATE USER IF NOT EXISTS '${db}'@'%' IDENTIFIED BY 'secret'; \
          CREATE DATABASE IF NOT EXISTS \`${db}\`; \
          GRANT ALL PRIVILEGES ON \`${db}\`.* TO '${db}'@'%';" </dev/null
@@ -508,12 +510,12 @@ db_remove() {
     local db; db=$(hosts_json_get_db "$1")
     [[ -z "$db" ]] && return 0
     log "Removing database and user: $db"
-    $DC exec -T mariadb mariadb -uroot -psecret -e \
+    $DC exec -T -e MYSQL_PWD=secret mariadb mariadb -uroot -e \
         "DROP DATABASE IF EXISTS \`${db}\`; DROP USER IF EXISTS '${db}'@'%';" </dev/null
 }
 
 db_exists() {
-    [[ -n "$($DC exec -T mariadb mariadb -uroot -psecret -Nse \
+    [[ -n "$($DC exec -T -e MYSQL_PWD=secret mariadb mariadb -uroot -Nse \
         "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='$1'" </dev/null)" ]]
 }
 
@@ -562,8 +564,23 @@ ssl_import_root_to_chrome() {
     info "Certificate imported to Chrome with nickname: $nick"
 }
 
+_hosts_module_cache_file() {
+    local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/web-sh"
+    mkdir -p "$cache_dir" 2>/dev/null
+    echo "$cache_dir/wsl-hosts-module"
+}
+
 _resolve_hosts_module_path() {
     [[ -n "$_HOSTS_MODULE_PATH_CACHED" ]] && { echo "$_HOSTS_MODULE_PATH_CACHED"; return 0; }
+    local cache_file; cache_file=$(_hosts_module_cache_file)
+    if [[ -f "$cache_file" ]]; then
+        local cached; cached=$(<"$cache_file")
+        if [[ -n "$cached" && -f "$cached" ]]; then
+            _HOSTS_MODULE_PATH_CACHED="$cached"
+            echo "$_HOSTS_MODULE_PATH_CACHED"
+            return 0
+        fi
+    fi
     local paths=(
         "/mnt/c/Users/*/Documents/PowerShell/Modules/Hosts/*/Hosts.psd1"
         "/mnt/c/Users/*/Documents/WindowsPowerShell/Modules/Hosts/*/Hosts.psd1"
@@ -575,6 +592,7 @@ _resolve_hosts_module_path() {
         for m in $p; do _HOSTS_MODULE_PATH_CACHED="$m"; break 2; done
     done
     shopt -u nullglob
+    [[ -n "$_HOSTS_MODULE_PATH_CACHED" ]] && printf '%s\n' "$_HOSTS_MODULE_PATH_CACHED" > "$cache_file" 2>/dev/null
     echo "$_HOSTS_MODULE_PATH_CACHED"
 }
 
@@ -600,7 +618,8 @@ redirect_add() {
         log "Adding host redirection for \"$host\""
         _run_host_mapping_cmdlet "New-HostnameMapping" "$host" || { warn "Failed to add host mapping for $host."; return 1; }
     else
-        getent hosts "$host" &>/dev/null && return 0
+        local escaped="${host//./\\.}"
+        grep -qE "^[^#]*[[:space:]]${escaped}([[:space:]]|$)" /etc/hosts 2>/dev/null && return 0
         log "Adding host redirection for \"$host\""
         echo "127.0.0.1 $host" | sudo tee -a /etc/hosts >/dev/null
     fi
@@ -793,7 +812,7 @@ dc_build() {
     local svc="${1:-}" cache="${2:-}"
     [[ "$cache" == "--no-cache" ]] || cache=""
     log "Building ${svc:-all services}..."
-    $DC build $cache $svc && spin "Recreating containers..." $DC up -d --force-recreate $svc
+    $DC build $cache $svc && spin "Recreating containers..." $DC up -d $svc
 }
 
 parse_new_host_args() {
@@ -842,7 +861,6 @@ Tools:
   supervisor-restart            Start/reload Supervisor
   install                       Create CLI symlinks
   dir                           Print script directory
-  git-update <user> <theme> [plugin]  Git pull on lyntouch.com
 EOF
 }
 
@@ -878,9 +896,6 @@ main() {
                           ln -sf "$SCRIPT_DIR/web.completions.fish" "$HOME/.config/fish/completions/web.fish"
                           info "Symlinks created." ;;
         dir)              echo "$SCRIPT_DIR" ;;
-        git-update)       local user="${1:-}" theme="${2:-}" plugin="${3:-lyntouch-modules}"
-                          [[ -z "$theme" ]] && die "Usage: web git-update <user> <theme> [plugin]"
-                          ssh "${user}@lyntouch.com" "git -C public_html/wp-content/plugins/${plugin} pull; git -C public_html/wp-content/themes/${theme} pull" ;;
         *)                show_help ;;
     esac
 }
