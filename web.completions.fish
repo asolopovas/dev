@@ -1,4 +1,4 @@
-set -l cmds up down stop restart build ps log new-host remove-host build-webconf bash fish rootssl hostssl import-rootca redis-flush redis-monitor debug supervisor-init supervisor-conf supervisor-restart install dir help
+set -l cmds up down stop restart build ps log new-host remove-host build-webconf bash fish rootssl hostssl import-rootca redis-flush redis-monitor debug install dir help
 set -l services franken_php mariadb redis phpmyadmin mailpit typesense
 set -l debug_modes off develop coverage debug profile trace
 set -l site_types wp laravel
@@ -38,5 +38,4 @@ complete -f -c web -n '__fish_web_using_cmd new-host' -a "-t"
 complete -f -c web -n __fish_web_newhost_flag_t -a "$site_types"
 complete -f -c web -n '__fish_web_using_cmd remove-host' -a "(__fish_web_hosts)"
 complete -f -c web -n '__fish_web_using_cmd hostssl' -a "(__fish_web_hosts)"
-complete -f -c web -n '__fish_web_using_cmd supervisor-conf' -a "(__fish_web_hosts)"
 complete -f -c web -n __fish_web_build_third -a --no-cache

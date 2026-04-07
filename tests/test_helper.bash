@@ -8,10 +8,9 @@ common_setup() {
     export BACKEND_CONFIG_DIR="$BACKEND_DIR/config"
     export BACKEND_SITES_DIR="$BACKEND_CONFIG_DIR/sites"
     export HOSTS_JSON="$SCRIPT_DIR/web-hosts.json"
-    export SUPERVISOR_DIR="$TEST_TMPDIR/supervisor"
     export CERTS_DIR="$BACKEND_CONFIG_DIR/ssl"
 
-    mkdir -p "$WEB_ROOT" "$SCRIPT_DIR" "$BACKEND_SITES_DIR" "$CERTS_DIR" "$SUPERVISOR_DIR/conf.d"
+    mkdir -p "$WEB_ROOT" "$SCRIPT_DIR" "$BACKEND_SITES_DIR" "$CERTS_DIR"
 
     cat > "$HOSTS_JSON" <<-JSON
 {

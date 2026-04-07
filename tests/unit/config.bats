@@ -3,16 +3,8 @@
 setup()    { load '../test_helper'; common_setup; }
 teardown() { common_teardown; }
 
-@test "supervisor_generate_conf creates config with artisan horizon" {
-    supervisor_generate_conf "myapp.test" "$SUPERVISOR_DIR/conf.d" >/dev/null 2>&1
-    local conf="$SUPERVISOR_DIR/conf.d/myapp_test.conf"
-    [[ -f "$conf" ]]
-    grep -q "artisan horizon" "$conf"
-}
-
 @test "remove_host cleans SSL files" {
     touch "$CERTS_DIR/cleanup.test.key" "$CERTS_DIR/cleanup.test.crt" "$CERTS_DIR/cleanup.test.csr"
-    touch "$SUPERVISOR_DIR/conf.d/cleanup_test.conf"
     hosts_json_add "cleanup.test" "wp" "cleanup_wp"
 
     remove_host "cleanup.test" >/dev/null 2>&1
@@ -20,7 +12,6 @@ teardown() { common_teardown; }
     [[ ! -e "$CERTS_DIR/cleanup.test.key" ]]
     [[ ! -e "$CERTS_DIR/cleanup.test.crt" ]]
     [[ ! -e "$CERTS_DIR/cleanup.test.csr" ]]
-    [[ ! -e "$SUPERVISOR_DIR/conf.d/cleanup_test.conf" ]]
 }
 
 @test "remove_host removes JSON entry" {

@@ -13,7 +13,6 @@ CERTS_DIR="$BACKEND_CONFIG_DIR/ssl"
 ROOT_KEY="$CERTS_DIR/rootCA.key" ROOT_CRT="$CERTS_DIR/rootCA.crt"
 DC="docker compose -f $SCRIPT_DIR/docker-compose.yml"
 [[ -f "$SCRIPT_DIR/templates.yml" ]] && DC="$DC -f $SCRIPT_DIR/templates.yml"
-SUPERVISOR_DIR="${SUPERVISOR_DIR:-$HOME/supervisor}"
 KNOWN_SLDS="co.uk gov.uk com.br co.jp"
 _HOSTS_MODULE_PATH_CACHED="" _IS_WSL=""
 command -v gum &>/dev/null && _HAS_GUM=1 || _HAS_GUM=0
@@ -107,16 +106,13 @@ new_host_wizard() {
     TYPE=$(select_option "Site type:" "wp" "laravel")
     local default_db; default_db=$(make_db_name "$HOST" "$TYPE")
     DB_NAME=$(prompt_input "Database name" "$default_db")
-    local with_supervisor=false
-    [[ "$TYPE" == "laravel" ]] && confirm "Generate Supervisor config?" && with_supervisor=true
     echo ""
     log "Hostname:   $HOST"
     log "Type:       $TYPE"
     log "Database:   $DB_NAME"
-    [[ "$TYPE" == "laravel" ]] && log "Supervisor: $with_supervisor"
     echo ""
     confirm "Proceed?" || { warn "Aborted."; return 1; }
-    new_host "$HOST" "$TYPE" "$DB_NAME" "$with_supervisor"
+    new_host "$HOST" "$TYPE" "$DB_NAME"
 }
 
 is_wsl() {
@@ -375,59 +371,6 @@ build_webconf() {
     spin "Restarting Caddy..." $DC restart franken_php
 }
 
-supervisor_init() {
-    [[ -f "$SUPERVISOR_DIR/supervisord.conf" ]] && return 0
-    mkdir -p "$SUPERVISOR_DIR"/{conf.d,logs}
-    cat > "$SUPERVISOR_DIR/supervisord.conf" <<-EOF
-	[unix_http_server]
-	file=$SUPERVISOR_DIR/supervisor.sock
-
-	[supervisord]
-	logfile=$SUPERVISOR_DIR/logs/supervisord.log
-	pidfile=$SUPERVISOR_DIR/supervisord.pid
-
-	[rpcinterface:supervisor]
-	supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
-
-	[supervisorctl]
-	serverurl=unix://$SUPERVISOR_DIR/supervisor.sock
-
-	[include]
-	files = $SUPERVISOR_DIR/conf.d/*.conf
-	EOF
-    info "Supervisor initialized at $SUPERVISOR_DIR"
-}
-
-supervisor_generate_conf() {
-    local host="$1"; require_host "$host" "supervisor-conf"
-    supervisor_init
-    local hu="${host//./_}" outdir="${2:-$SUPERVISOR_DIR/conf.d}" logdir="$SUPERVISOR_DIR/logs"
-    cat > "$outdir/${hu}.conf" <<-EOF
-	[program:$hu]
-	process_name=%(program_name)s_%(process_num)02d
-	command=php $WEB_ROOT/$host/artisan horizon
-	autostart=true
-	autorestart=true
-	stopasgroup=true
-	killasgroup=true
-	numprocs=1
-	redirect_stderr=true
-	stdout_logfile=$logdir/${hu}.log
-	stopwaitsecs=3600
-	EOF
-    info "Supervisor config generated at $outdir/${hu}.conf"
-}
-
-supervisor_restart() {
-    supervisor_init
-    if [[ -f "$SUPERVISOR_DIR/supervisord.pid" ]] && kill -0 "$(cat "$SUPERVISOR_DIR/supervisord.pid")" 2>/dev/null; then
-        supervisorctl -c "$SUPERVISOR_DIR/supervisord.conf" reread
-        supervisorctl -c "$SUPERVISOR_DIR/supervisord.conf" update
-    else
-        supervisord -c "$SUPERVISOR_DIR/supervisord.conf"
-    fi
-}
-
 scaffold_wordpress() {
     local host="$1" db_name="$2" archive="$WEB_ROOT/wordpress.tar.gz" path="$WEB_ROOT/$host"
     require_cmd curl; require_cmd tar
@@ -458,13 +401,12 @@ scaffold_laravel() {
 }
 
 new_host() {
-    local host="$1" host_type="$2" db_name="${3:-}" with_supervisor="${4:-true}"
+    local host="$1" host_type="$2" db_name="${3:-}"
     require_docker; ensure_jq; require_host "$host" "new-host"
     [[ -z "$db_name" ]] && db_name=$(make_db_name "$host" "$host_type")
     case "$host_type" in
         wp|wordpress) scaffold_wordpress "$host" "$db_name" ;;
-        laravel)      scaffold_laravel "$host" "$db_name"
-                      [[ "$with_supervisor" == "true" ]] && supervisor_generate_conf "$host" ;;
+        laravel)      scaffold_laravel "$host" "$db_name" ;;
         *)            die "Invalid type '$host_type'. Use: wp, wordpress, or laravel." ;;
     esac
     hosts_json_add "$host" "$host_type" "$db_name"
@@ -474,13 +416,11 @@ new_host() {
 }
 
 remove_host() {
-    local host="$1" hu; require_host "$host" "remove-host"
-    hu="${host//./_}"
+    local host="$1"; require_host "$host" "remove-host"
     [[ -n "$(hosts_json_get_db "$host")" ]] && db_remove "$host"
     log "Removing $WEB_ROOT/$host"
     rm -rf "${WEB_ROOT:?}/$host"
     rm -f "$CERTS_DIR/$host".{key,crt,csr}
-    rm -f "$SUPERVISOR_DIR/conf.d/${hu}.conf"
     redirect_remove "$host"
     hosts_json_remove "$host"
 }
@@ -558,9 +498,6 @@ Tools:
   redis-flush                   Flush Redis
   redis-monitor                 Monitor Redis
   debug [off|debug|profile]     Set Xdebug mode (interactive if omitted)
-  supervisor-init                Initialize user-level Supervisor
-  supervisor-conf <host>        Generate Supervisor config
-  supervisor-restart            Start/reload Supervisor
   install                       Create CLI symlinks
   dir                           Print script directory
 EOF
@@ -591,9 +528,6 @@ main() {
         debug)            require_docker; local mode="${1:-}"
                           [[ -z "$mode" ]] && mode=$(select_option "Xdebug mode:" "off" "debug" "profile")
                           sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$mode/" "$SCRIPT_DIR/.env"; spin "Applying Xdebug mode: $mode..." $DC up -d franken_php ;;
-        supervisor-init)  supervisor_init ;;
-        supervisor-conf)    supervisor_generate_conf "${1:-}" ;;
-        supervisor-restart) supervisor_restart ;;
         install)          ln -sf "$SCRIPT_DIR/web.sh" "$HOME/.local/bin/web"
                           ln -sf "$SCRIPT_DIR/web.completions.fish" "$HOME/.config/fish/completions/web.fish"
                           info "Symlinks created." ;;
