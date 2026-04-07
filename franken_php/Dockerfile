@@ -145,7 +145,9 @@ ENV PHP_INI_DIR=/usr/local/etc/php \
 ENV PATH=/home/${APP_USER}/.bun/bin:/home/${APP_USER}/.local/bin:${PATH}
 
 COPY --link conf.d/  /usr/local/etc/php/conf.d/
-COPY --link php-env.sh entrypoint.sh /usr/local/bin/
+COPY --link entrypoint.sh /usr/local/bin/
+
+RUN cp /usr/local/etc/php/php.ini-development /usr/local/etc/php/php.ini
 
 USER ${UID}:${GID}
 
