@@ -31,3 +31,18 @@ teardown() { common_teardown; }
     run main nonexistent-command
     [[ "$output" == *"Usage: web"* ]]
 }
+
+@test "main down rejects service argument" {
+    DC="true"
+    require_docker() { :; }
+    run main down franken_php
+    [[ "$status" -ne 0 ]]
+    [[ "$output" == *"down operates on the entire stack"* ]]
+}
+
+@test "main down with no args succeeds" {
+    DC="true"
+    require_docker() { :; }
+    run main down
+    [[ "$status" -eq 0 ]]
+}

@@ -28,6 +28,15 @@ teardown() { common_teardown; }
     [[ "$output" == *"subjectAltName"* ]]
 }
 
+@test "xdebug.ini uses env var interpolation placeholders" {
+    local ini="$PROJECT_ROOT/franken_php/conf.d/xdebug.ini"
+    [[ -f "$ini" ]]
+    grep -q '${XDEBUG_MODE}' "$ini"
+    grep -q '${XDEBUG_HOST}' "$ini"
+    grep -q '${XDEBUG_IDEKEY}' "$ini"
+    grep -q '${XDEBUG_TRIGGER}' "$ini"
+}
+
 @test "build_webconf generates Caddy config from template" {
     ssl_generate_host() { :; }
     hosts_json_add "foo.test" "wp" "foo_wp"
