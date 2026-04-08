@@ -46,7 +46,7 @@ services:
             MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
         volumes:
             - db:/var/lib/mysql
-            - ./mariadb/custom.cnf:/etc/mysql/conf.d/custom.cnf:ro
+            - ./mariadb:/etc/mysql/conf.d:ro
         healthcheck:
             disable: true
         networks:
@@ -58,7 +58,7 @@ services:
         image: redis:7.4.2-bookworm
         restart: always
         volumes:
-            - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+            - ./redis:/usr/local/etc/redis:ro
         command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
         healthcheck:
             disable: true
