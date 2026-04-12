@@ -30,7 +30,7 @@ RUN docker-php-ext-configure gd \
         pcntl \
         zip
 
-RUN pecl install apcu igbinary imagick redis xdebug \
+RUN MAKEFLAGS="-j$(nproc)" pecl install apcu igbinary imagick redis xdebug \
     && docker-php-ext-enable apcu igbinary imagick redis xdebug \
     && pecl clear-cache \
     && find /usr/local/lib/php/extensions -name '*.so' -exec strip --strip-unneeded {} +
