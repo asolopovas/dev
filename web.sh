@@ -244,22 +244,26 @@ ssl_generate_root() {
 ssl_generate_host() {
     local h="$1" subj="/C=GB/ST=London/L=London/O=$1/OU=IT Department/CN=Lyntouch Self-Signed Host Certificate/emailAddress=info@lyntouch.com"
     local crt="$CERTS_DIR/$h.crt" key="$CERTS_DIR/$h.key" csr="$CERTS_DIR/$h.csr"
+    [[ -f "$ROOT_CRT" && -f "$ROOT_KEY" ]] || { warn "Root CA missing — generating it now"; ssl_generate_root || return 1; }
     [[ -f "$key" ]] || { info "Generating SSL key for $h"
-        openssl req -new -sha256 -nodes -out "$csr" -newkey rsa:2048 -subj "$subj" -keyout "$key"; }
-    [[ -f "$crt" ]] || { info "Generating SSL certificate for $h"
+        openssl req -new -sha256 -nodes -out "$csr" -newkey rsa:2048 -subj "$subj" -keyout "$key" || return 1; }
+    [[ -f "$crt" ]] || {
+        [[ -f "$csr" ]] || openssl req -new -sha256 -nodes -out "$csr" -newkey rsa:2048 -subj "$subj" -key "$key" || return 1
+        info "Generating SSL certificate for $h"
         openssl x509 -req -passin pass:default -in "$csr" -CA "$ROOT_CRT" -CAkey "$ROOT_KEY" \
-            -CAcreateserial -out "$crt" -days 500 -sha256 -extfile <(ssl_extfile "$h"); }
+            -CAcreateserial -out "$crt" -days 500 -sha256 -extfile <(ssl_extfile "$h") || return 1; }
 }
 
 ssl_import_root_to_chrome() {
     is_wsl && die "Chrome root CA import is not supported on WSL."
-    local cert="${1:-$ROOT_CRT}" nick="${2:-Root CA}"
+    local cert="${1:-$ROOT_CRT}" nick="${2:-Lyntouch Root CA}"
     [[ -f "$cert" ]] || die "Certificate file not found: $cert"
     openssl x509 -outform der -in "$cert" -out "${cert}.der"
     local db="$HOME/.pki/nssdb"
     [[ -d "$db" ]] || { mkdir -p "$db"; certutil -N -d "$db"; }
+    certutil -d "sql:$db" -D -n "$nick" 2>/dev/null
     certutil -d "sql:$db" -A -t "C,," -n "$nick" -i "${cert}.der"
-    info "Certificate imported to Chrome with nickname: $nick"
+    info "Certificate imported to Chrome/Brave with nickname: $nick"
 }
 
 _hosts_module_cache_file() {
