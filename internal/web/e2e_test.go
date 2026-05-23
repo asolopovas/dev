@@ -70,7 +70,7 @@ func TestBinaryWorkflowE2EWithFakeTools(t *testing.T) {
 		{"import-rootca"},
 		{"new-host", "e2ewp.test", "-t", "wp"},
 		{"new-host", "e2elaravel.test", "-t", "laravel"},
-		{"remove-host", "e2ewp.test"},
+		{"remove-host", "e2ewp.test", "--yes"},
 		{"debug", "off"},
 		{"mysql"},
 		{"db-backup"},

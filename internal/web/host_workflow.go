@@ -9,40 +9,6 @@ import (
 	"strings"
 )
 
-func parseNewHostArgs(args []string) (string, string, error) {
-	host := ""
-	hostType := "wp"
-	for i := 0; i < len(args); {
-		arg := args[i]
-		switch arg {
-		case "-t", "--type":
-			if i+1 >= len(args) || args[i+1] == "" {
-				return "", "", fmt.Errorf("option %s requires a value (wp or laravel)", arg)
-			}
-			hostType = args[i+1]
-			i += 2
-		case "":
-			i++
-		default:
-			if strings.HasPrefix(arg, "-") {
-				return "", "", fmt.Errorf("unknown option %q", arg)
-			}
-			if host != "" {
-				return "", "", fmt.Errorf("unexpected argument %q", arg)
-			}
-			host = arg
-			i++
-		}
-	}
-	if host == "" {
-		return "", "", errors.New("no hostname specified. Usage: web new-host <hostname> -t <wp|laravel>")
-	}
-	if !ValidHostname(host) {
-		return "", "", fmt.Errorf("invalid hostname %q. Use a hostname like example.test", host)
-	}
-	return host, hostType, nil
-}
-
 func (a *App) newHostWizard(ctx context.Context) error {
 	host := a.prompt("Hostname", "")
 	hostType := a.choose("Site type:", "wp", "laravel")
@@ -98,30 +64,25 @@ func (a *App) newHost(ctx context.Context, host string, hostType string, dbName 
 	return nil
 }
 
-func (a *App) removeHost(ctx context.Context, host string) error {
-	if host == "" {
+func (a *App) removeHostByName(ctx context.Context, name string, askConfirmation bool) error {
+	if name == "" {
 		return errors.New("no hostname specified. Usage: web remove-host <hostname>")
+	}
+	if !ValidHostname(name) {
+		return fmt.Errorf("invalid hostname %q. Use a hostname like example.test", name)
 	}
 	registry, err := EnsureRegistry(a.Config)
 	if err != nil {
 		return err
 	}
-	if db := registry.DB(host); db != "" {
-		if err := a.removeDatabase(ctx, db); err != nil {
-			return err
-		}
+	host, ok := registry.Host(name)
+	if !ok {
+		return fmt.Errorf("host %s is not configured", name)
 	}
-	if err := os.RemoveAll(filepath.Join(a.Config.WebRoot, host)); err != nil {
-		return err
+	if askConfirmation && !a.confirm(fmt.Sprintf("Remove %s?", name)) {
+		return nil
 	}
-	for _, ext := range []string{"key", "crt", "csr"} {
-		_ = os.Remove(filepath.Join(a.Config.CertsDir, host+"."+ext))
-	}
-	if err := a.removeHostRedirect(ctx, host); err != nil {
-		return err
-	}
-	registry.Remove(host)
-	return SaveRegistry(a.Config.HostsJSON, registry)
+	return a.removeConfiguredHosts(ctx, registry, []HostEntry{host})
 }
 
 func (a *App) removeHostInteractive(ctx context.Context) error {
@@ -132,8 +93,8 @@ func (a *App) removeHostInteractive(ctx context.Context) error {
 	if len(registry.Hosts) == 0 {
 		return errors.New("no hosts configured")
 	}
-	if !commandExists("gum") {
-		return errors.New("interactive remove-host requires gum or a hostname argument")
+	if !commandExists("gum") || !interactiveInput(a.In) {
+		return errors.New("run web remove-host <hostname> or web remove-host <hostname> --yes")
 	}
 	var names []string
 	for _, host := range registry.Hosts {
@@ -143,14 +104,45 @@ func (a *App) removeHostInteractive(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	selected := strings.Fields(string(out))
-	if len(selected) == 0 {
+	selectedNames := strings.Fields(string(out))
+	if len(selectedNames) == 0 {
 		return errors.New("no hosts selected")
 	}
-	for _, host := range selected {
-		if err := a.removeHost(ctx, host); err != nil {
+	selectedHosts := make([]HostEntry, 0, len(selectedNames))
+	for _, name := range selectedNames {
+		host, ok := registry.Host(name)
+		if !ok {
+			return fmt.Errorf("host %s is not configured", name)
+		}
+		selectedHosts = append(selectedHosts, host)
+	}
+	return a.removeConfiguredHosts(ctx, registry, selectedHosts)
+}
+
+func (a *App) removeConfiguredHosts(ctx context.Context, registry Registry, hosts []HostEntry) error {
+	for _, host := range hosts {
+		if err := a.removeHostResources(ctx, host); err != nil {
+			return err
+		}
+		registry.Remove(host.Name)
+	}
+	if err := SaveRegistry(a.Config.HostsJSON, registry); err != nil {
+		return err
+	}
+	return a.rebuildWebConfiguration(ctx)
+}
+
+func (a *App) removeHostResources(ctx context.Context, host HostEntry) error {
+	if host.DB != "" {
+		if err := a.removeDatabase(ctx, host.DB); err != nil {
 			return err
 		}
 	}
-	return a.rebuildWebConfiguration(ctx)
+	if err := os.RemoveAll(filepath.Join(a.Config.WebRoot, host.Name)); err != nil {
+		return err
+	}
+	for _, ext := range []string{"key", "crt", "csr"} {
+		_ = os.Remove(filepath.Join(a.Config.CertsDir, host.Name+"."+ext))
+	}
+	return a.removeHostRedirect(ctx, host.Name)
 }

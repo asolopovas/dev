@@ -117,18 +117,15 @@ func addHostCommands(root *cobra.Command, app *App) {
 	})
 	newHost.Flags().StringVarP(&hostType, "type", "t", "wp", "Site type")
 	root.AddCommand(newHost)
-	root.AddCommand(appCommand("remove-host [host]", "Remove site", cobra.MaximumNArgs(1), func(ctx context.Context, args []string) error {
+	var skipConfirmation bool
+	removeHost := appCommand("remove-host [host]", "Remove site", cobra.MaximumNArgs(1), func(ctx context.Context, args []string) error {
 		if len(args) == 0 {
 			return app.removeHostInteractive(ctx)
 		}
-		if !app.confirm(fmt.Sprintf("Remove %s?", args[0])) {
-			return nil
-		}
-		if err := app.removeHost(ctx, args[0]); err != nil {
-			return err
-		}
-		return app.rebuildWebConfiguration(ctx)
-	}))
+		return app.removeHostByName(ctx, args[0], !skipConfirmation)
+	})
+	removeHost.Flags().BoolVarP(&skipConfirmation, "yes", "y", false, "Remove without confirmation")
+	root.AddCommand(removeHost)
 	root.AddCommand(appCommand("build-webconf", "Regenerate Caddy configs", cobra.NoArgs, func(ctx context.Context, args []string) error {
 		return app.rebuildWebConfiguration(ctx)
 	}))

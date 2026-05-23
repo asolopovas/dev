@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"slices"
 	"strings"
 )
 
 func (a *App) prompt(label string, value string) string {
-	if commandExists("gum") {
+	if commandExists("gum") && interactiveInput(a.In) {
 		args := []string{"input", "--prompt", label + ": "}
 		if value != "" {
 			args = append(args, "--value", value)
@@ -35,7 +37,7 @@ func (a *App) prompt(label string, value string) string {
 }
 
 func (a *App) choose(prompt string, choices ...string) string {
-	if commandExists("gum") {
+	if commandExists("gum") && interactiveInput(a.In) {
 		args := append([]string{"choose", "--header=" + prompt}, choices...)
 		out, err := a.Runner.Output(context.Background(), "gum", args...)
 		if err == nil {
@@ -53,7 +55,7 @@ func (a *App) choose(prompt string, choices ...string) string {
 }
 
 func (a *App) confirm(message string) bool {
-	if commandExists("gum") {
+	if commandExists("gum") && interactiveInput(a.In) {
 		return a.Runner.Run(context.Background(), "gum", "confirm", message) == nil
 	}
 	fmt.Fprintf(a.Out, "%s [y/N]: ", message)
@@ -63,4 +65,21 @@ func (a *App) confirm(message string) bool {
 		return v == "y" || v == "yes"
 	}
 	return false
+}
+
+func interactiveInput(input io.Reader) bool {
+	file, ok := input.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := file.Stat()
+	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	terminal, err := os.OpenFile("/dev/tty", os.O_RDONLY, 0)
+	if err != nil {
+		return false
+	}
+	_ = terminal.Close()
+	return true
 }
