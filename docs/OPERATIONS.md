@@ -62,7 +62,7 @@ web stop
 web down
 ```
 
-`down` operates on the whole stack. Use `stop <service>` when you only want to stop one service.
+`down` operates on the whole stack. Use `stop <service>` when you only want to stop one service. `up`, `build`, and `debug` remove stale Compose orphan containers so renamed services do not keep old ports bound.
 
 ## Build images
 
@@ -220,7 +220,7 @@ Host redirection on WSL uses the Windows hosts file through PowerShell and the `
 
 | Symptom | Fix |
 |---|---|
-| Port 80 or 443 is already in use | Stop host-level nginx/apache/Caddy or change the compose port mappings |
+| Port 80 or 443 is already in use | Stop host-level nginx/apache/Caddy, run `web up` to remove old project orphans, or change the compose port mappings |
 | `web` command not found | Run `make install`, ensure `$HOME/.local/bin` is on `PATH`, or use `./web.sh` |
 | `jq` missing | Install `jq`; on apt-based systems `web.sh` can attempt installation when needed |
 | `gum` missing | Install `gum` for the interactive UI, or use non-interactive command flags where available |

@@ -46,3 +46,35 @@ teardown() { common_teardown; }
     run main down
     [[ "$status" -eq 0 ]]
 }
+
+@test "main up removes orphan containers" {
+    cat > "$SCRIPT_DIR/dc-capture" <<-'SH'
+printf '%s\n' "$*" > "$SCRIPT_DIR/dc-args"
+SH
+    chmod +x "$SCRIPT_DIR/dc-capture"
+    DC="$SCRIPT_DIR/dc-capture"
+    require_docker() { :; }
+    dc_ps() { :; }
+
+    run main up
+
+    [[ "$status" -eq 0 ]]
+    [[ "$(<"$SCRIPT_DIR/dc-args")" == "up -d --remove-orphans" ]]
+}
+
+@test "stale templates file is ignored" {
+    local dir="$TEST_TMPDIR/stale-compose"
+    mkdir -p "$dir"
+    cat > "$dir/templates.yml" <<-'YAML'
+services:
+  nginx:
+    networks:
+      nginx:
+        aliases:
+          - stale.test
+YAML
+
+    run bash -c "export SCRIPT_DIR='$dir'; source '$PROJECT_ROOT/web.sh'; [[ \"\$DC\" == \"docker compose -f $dir/docker-compose.yml\" ]]"
+
+    [[ "$status" -eq 0 ]]
+}

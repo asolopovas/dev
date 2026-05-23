@@ -12,7 +12,9 @@ HOSTS_JSON="${HOSTS_JSON:-$SCRIPT_DIR/web-hosts.json}"
 CERTS_DIR="$BACKEND_CONFIG_DIR/ssl"
 ROOT_KEY="$CERTS_DIR/rootCA.key" ROOT_CRT="$CERTS_DIR/rootCA.crt"
 DC="docker compose -f $SCRIPT_DIR/docker-compose.yml"
-[[ -f "$SCRIPT_DIR/templates.yml" ]] && DC="$DC -f $SCRIPT_DIR/templates.yml"
+if [[ -f "$SCRIPT_DIR/templates.yml" ]] && grep -q '^[[:space:]]\{2\}franken_php:' "$SCRIPT_DIR/templates.yml"; then
+    DC="$DC -f $SCRIPT_DIR/templates.yml"
+fi
 KNOWN_SLDS="co.uk gov.uk com.br co.jp"
 _HOSTS_MODULE_PATH_CACHED="" _IS_WSL=""
 command -v gum &>/dev/null && _HAS_GUM=1 || _HAS_GUM=0
@@ -77,7 +79,7 @@ dc_action() {
             spin "$label" $DC down
             ;;
         up)
-            spin "$label" $DC up -d "${services[@]}"
+            spin "$label" $DC up -d --remove-orphans "${services[@]}"
             ;;
         *)
             spin "$label" $DC "$action" "${services[@]}"
@@ -538,7 +540,7 @@ dc_build() {
     local svc="${1:-}" cache="${2:-}"
     [[ "$cache" == "--no-cache" ]] || cache=""
     log "Building ${svc:-all services}..."
-    $DC build $cache $svc && spin "Recreating containers..." $DC up -d $svc
+    $DC build $cache $svc && spin "Recreating containers..." $DC up -d --remove-orphans $svc
 }
 
 parse_new_host_args() {
@@ -630,7 +632,7 @@ main() {
         redis-monitor)    require_docker; $DC exec redis redis-cli monitor ;;
         debug)            require_docker; local mode="${1:-}"
                           [[ -z "$mode" ]] && mode=$(select_option "Xdebug mode:" "off" "debug" "profile")
-                          sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$mode/" "$SCRIPT_DIR/.env"; spin "Applying Xdebug mode: $mode..." $DC up -d franken_php ;;
+                          sed -i "s/XDEBUG_MODE=.*/XDEBUG_MODE=$mode/" "$SCRIPT_DIR/.env"; spin "Applying Xdebug mode: $mode..." $DC up -d --remove-orphans franken_php ;;
         install)          ln -sf "$SCRIPT_DIR/web.sh" "$HOME/.local/bin/web"
                           ln -sf "$SCRIPT_DIR/web.completions.fish" "$HOME/.config/fish/completions/web.fish"
                           info "Symlinks created." ;;

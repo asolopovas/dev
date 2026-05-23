@@ -49,7 +49,7 @@ Without installation, replace `web` with `./web.sh`. The default paths assume th
 
 | Command | Purpose |
 |---|---|
-| `web up [service]` | Start all services or one service |
+| `web up [service]` | Start all services or one service and remove stale Compose orphans |
 | `web stop [service]` | Stop all services or one service |
 | `web restart [service]` | Restart all services or one service |
 | `web down` | Stop and remove the stack |
