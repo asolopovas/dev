@@ -35,6 +35,36 @@ func TestCobraHelpAndCompletions(t *testing.T) {
 	}
 }
 
+func TestHostArgumentCompletion(t *testing.T) {
+	dir := t.TempDir()
+	cfg := testHostWorkflowConfig(dir)
+	if err := SaveRegistry(cfg.HostsJSON, Registry{Hosts: []HostEntry{
+		{Name: "alpha.test", Type: "laravel", DB: "alpha_db"},
+		{Name: "beta.test", Type: "wordpress", DB: "beta_wp"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{Config: cfg, Out: &bytes.Buffer{}, Err: &bytes.Buffer{}, In: strings.NewReader("")}
+	root := NewAppCommand(app)
+	for _, name := range []string{"remove-host", "hostssl"} {
+		cmd, _, err := root.Find([]string{name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		values, directive := cmd.ValidArgsFunction(cmd, nil, "a")
+		if directive == 0 || len(values) != 1 || !strings.HasPrefix(values[0], "alpha.test\t") {
+			t.Fatalf("unexpected %s completion: %#v %v", name, values, directive)
+		}
+	}
+}
+
+func TestSiteTypeFlagCompletion(t *testing.T) {
+	values, directive := completeSiteTypes(nil, nil, "la")
+	if directive == 0 || len(values) != 1 || values[0] != "laravel" {
+		t.Fatalf("unexpected site type completion: %#v %v", values, directive)
+	}
+}
+
 func TestCompletionInstallWritesBashAndFish(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

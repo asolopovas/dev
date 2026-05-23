@@ -16,7 +16,7 @@ make install
 
 The default paths assume the checkout lives at `$HOME/www/dev` and projects live under `$HOME/www`. For another layout, export `SCRIPT_DIR` and `WEB_ROOT` before running `web`.
 
-`make install` builds the Go CLI and installs it as `/usr/local/bin/web`. If that path needs elevated permissions, the installer uses `sudo -A` with `SUDO_ASKPASS` or a detected askpass helper. It also installs shell completions under the current user's config directories and updates an existing `$HOME/.local/bin/web` entry to point at `/usr/local/bin/web` so older installs do not shadow the Go binary.
+`make install` builds the Go CLI and installs it as `/usr/local/bin/web`. If that path needs elevated permissions, the installer uses `sudo -A` with `SUDO_ASKPASS` or a detected askpass helper. It also installs shell completions under the current user's config directories, including configured host names for host commands, and updates an existing `$HOME/.local/bin/web` entry to point at `/usr/local/bin/web` so older installs do not shadow the Go binary.
 
 If you skip installation, run commands as `go run ./cmd/web <command>` from the checkout directory with the same path assumptions or exported path variables.
 

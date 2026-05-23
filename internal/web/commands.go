@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -107,6 +108,40 @@ func addEnvironmentCommands(root *cobra.Command, app *App) {
 	}))
 }
 
+func completeSiteTypes(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	var values []string
+	for _, value := range []string{"wp", "wordpress", "laravel"} {
+		if strings.HasPrefix(value, toComplete) {
+			values = append(values, value)
+		}
+	}
+	return values, cobra.ShellCompDirectiveNoFileComp
+}
+
+func (a *App) completeConfiguredHosts(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	registry, err := LoadRegistry(a.Config.HostsJSON)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	values := make([]string, 0, len(registry.Hosts))
+	for _, host := range registry.Hosts {
+		if strings.HasPrefix(host.Name, toComplete) {
+			description := host.Type
+			if host.DB != "" {
+				description += " " + host.DB
+			}
+			values = append(values, host.Name+"\t"+description)
+		}
+	}
+	return values, cobra.ShellCompDirectiveNoFileComp
+}
+
 func addHostCommands(root *cobra.Command, app *App) {
 	var hostType string
 	newHost := appCommand("new-host [host]", "Create site", cobra.MaximumNArgs(1), func(ctx context.Context, args []string) error {
@@ -116,6 +151,7 @@ func addHostCommands(root *cobra.Command, app *App) {
 		return app.newHost(ctx, args[0], hostType, "")
 	})
 	newHost.Flags().StringVarP(&hostType, "type", "t", "wp", "Site type")
+	_ = newHost.RegisterFlagCompletionFunc("type", completeSiteTypes)
 	root.AddCommand(newHost)
 	var skipConfirmation bool
 	removeHost := appCommand("remove-host [host]", "Remove site", cobra.MaximumNArgs(1), func(ctx context.Context, args []string) error {
@@ -125,6 +161,7 @@ func addHostCommands(root *cobra.Command, app *App) {
 		return app.removeHostByName(ctx, args[0], !skipConfirmation)
 	})
 	removeHost.Flags().BoolVarP(&skipConfirmation, "yes", "y", false, "Remove without confirmation")
+	removeHost.ValidArgsFunction = app.completeConfiguredHosts
 	root.AddCommand(removeHost)
 	root.AddCommand(appCommand("build-webconf", "Regenerate Caddy configs", cobra.NoArgs, func(ctx context.Context, args []string) error {
 		return app.rebuildWebConfiguration(ctx)
@@ -154,9 +191,11 @@ func addSSLCommands(root *cobra.Command, app *App) {
 		}
 		return app.dockerCompose(ctx, "restart", "franken_php")
 	}))
-	root.AddCommand(appCommand("hostssl <host>", "Generate host SSL", cobra.ExactArgs(1), func(ctx context.Context, args []string) error {
+	hostSSL := appCommand("hostssl <host>", "Generate host SSL", cobra.ExactArgs(1), func(ctx context.Context, args []string) error {
 		return app.generateHostCertificate(ctx, args[0])
-	}))
+	})
+	hostSSL.ValidArgsFunction = app.completeConfiguredHosts
+	root.AddCommand(hostSSL)
 	root.AddCommand(appCommand("import-rootca", "Import root CA to Chrome", cobra.NoArgs, func(ctx context.Context, args []string) error {
 		return app.importRootCertificate(ctx, app.Config.RootCrt, "Lyntouch Root CA")
 	}))
