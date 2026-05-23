@@ -27,8 +27,20 @@ func (a *App) newHost(ctx context.Context, host string, hostType string, dbName 
 	if !ValidHostname(host) {
 		return fmt.Errorf("invalid hostname %q. Use a hostname like example.test", host)
 	}
+	switch hostType {
+	case "wp", "wordpress", "laravel":
+	default:
+		return fmt.Errorf("invalid type %q. Use: wp, wordpress, or laravel", hostType)
+	}
 	if dbName == "" {
 		dbName = MakeDBName(host, hostType)
+	}
+	registry, err := EnsureRegistry(a.Config)
+	if err != nil {
+		return err
+	}
+	if _, ok := registry.Host(host); ok {
+		return fmt.Errorf("host %s already exists", host)
 	}
 	switch hostType {
 	case "wp", "wordpress":
@@ -39,12 +51,6 @@ func (a *App) newHost(ctx context.Context, host string, hostType string, dbName 
 		if err := a.scaffoldLaravel(ctx, host, dbName); err != nil {
 			return err
 		}
-	default:
-		return fmt.Errorf("invalid type %q. Use: wp, wordpress, or laravel", hostType)
-	}
-	registry, err := EnsureRegistry(a.Config)
-	if err != nil {
-		return err
 	}
 	if err := registry.Add(HostEntry{Name: host, Type: hostType, DB: dbName}); err != nil {
 		return err
@@ -59,8 +65,12 @@ func (a *App) newHost(ctx context.Context, host string, hostType string, dbName 
 		return err
 	}
 	if hostType == "laravel" {
-		return a.dockerCompose(ctx, "exec", "-T", "franken_php", "php", "/var/www/"+host+"/artisan", "migrate", "--force")
+		fmt.Fprintln(a.Out, "Running database migrations")
+		if err := a.dockerComposeQuiet(ctx, "exec", "-T", "franken_php", "php", "/var/www/"+host+"/artisan", "migrate", "--force", "--quiet"); err != nil {
+			return err
+		}
 	}
+	fmt.Fprintf(a.Out, "Ready: https://%s\n", host)
 	return nil
 }
 
@@ -77,7 +87,13 @@ func (a *App) removeHostByName(ctx context.Context, name string, askConfirmation
 	}
 	host, ok := registry.Host(name)
 	if !ok {
-		return fmt.Errorf("host %s is not configured", name)
+		if !a.hostResourceExists(name) {
+			return fmt.Errorf("host %s is not configured", name)
+		}
+		if askConfirmation && !a.confirm(fmt.Sprintf("Remove %s?", name)) {
+			return nil
+		}
+		return a.removeHostResources(ctx, HostEntry{Name: name})
 	}
 	if askConfirmation && !a.confirm(fmt.Sprintf("Remove %s?", name)) {
 		return nil
@@ -132,7 +148,24 @@ func (a *App) removeConfiguredHosts(ctx context.Context, registry Registry, host
 	return a.rebuildWebConfiguration(ctx)
 }
 
+func (a *App) hostResourceExists(name string) bool {
+	paths := []string{
+		filepath.Join(a.Config.WebRoot, name),
+		filepath.Join(a.Config.BackendSitesDir, name+".conf"),
+	}
+	for _, ext := range []string{"key", "crt", "csr"} {
+		paths = append(paths, filepath.Join(a.Config.CertsDir, name+"."+ext))
+	}
+	for _, path := range paths {
+		if _, err := os.Stat(path); err == nil || !os.IsNotExist(err) {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *App) removeHostResources(ctx context.Context, host HostEntry) error {
+	fmt.Fprintf(a.Out, "Removing host: %s\n", host.Name)
 	if host.DB != "" {
 		if err := a.removeDatabase(ctx, host.DB); err != nil {
 			return err
@@ -141,8 +174,15 @@ func (a *App) removeHostResources(ctx context.Context, host HostEntry) error {
 	if err := os.RemoveAll(filepath.Join(a.Config.WebRoot, host.Name)); err != nil {
 		return err
 	}
+	if err := os.Remove(filepath.Join(a.Config.BackendSitesDir, host.Name+".conf")); err != nil && !os.IsNotExist(err) {
+		return err
+	}
 	for _, ext := range []string{"key", "crt", "csr"} {
 		_ = os.Remove(filepath.Join(a.Config.CertsDir, host.Name+"."+ext))
 	}
-	return a.removeHostRedirect(ctx, host.Name)
+	if err := a.removeHostRedirect(ctx, host.Name); err != nil {
+		return err
+	}
+	fmt.Fprintf(a.Out, "Removed host: %s\n", host.Name)
+	return nil
 }

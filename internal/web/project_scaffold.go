@@ -22,8 +22,9 @@ func (a *App) scaffoldWordPress(ctx context.Context, host string, dbName string)
 	if !commandExists("tar") {
 		return fmt.Errorf("tar is not installed")
 	}
+	fmt.Fprintf(a.Out, "Creating WordPress project: %s\n", path)
 	if _, err := os.Stat(archive); os.IsNotExist(err) {
-		if err := a.Runner.Run(ctx, "curl", "-fSL", "https://en-gb.wordpress.org/latest-en_GB.tar.gz", "-o", archive); err != nil {
+		if err := a.Runner.Run(ctx, "curl", "-fsSL", "https://en-gb.wordpress.org/latest-en_GB.tar.gz", "-o", archive); err != nil {
 			return err
 		}
 	} else if err != nil {
@@ -76,7 +77,8 @@ func (a *App) scaffoldLaravel(ctx context.Context, host string, dbName string) e
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	if err := a.Runner.Run(ctx, "composer", "create-project", "--prefer-dist", "laravel/laravel", path); err != nil {
+	fmt.Fprintf(a.Out, "Creating Laravel project: %s\n", path)
+	if err := a.runQuiet(ctx, "composer", "create-project", "--quiet", "--prefer-dist", "laravel/laravel", path); err != nil {
 		return err
 	}
 	envPath := filepath.Join(path, ".env")

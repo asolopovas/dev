@@ -48,6 +48,7 @@ func (a *App) rebuildWebConfiguration(ctx context.Context) error {
 			return err
 		}
 	}
+	fmt.Fprintf(a.Out, "Rebuilding web configuration: %d hosts\n", len(validHosts))
 	if err := a.writeComposeAliases(validHosts); err != nil {
 		return err
 	}
@@ -59,8 +60,8 @@ func (a *App) rebuildWebConfiguration(ctx context.Context) error {
 			return err
 		}
 	}
-	fmt.Fprintln(a.Out, "Finished building web configs. Restarting Caddy...")
-	return a.dockerCompose(ctx, "restart", "franken_php")
+	fmt.Fprintln(a.Out, "Restarting Caddy")
+	return a.dockerComposeQuiet(ctx, "restart", "franken_php")
 }
 
 func (a *App) writeComposeAliases(hosts []HostEntry) error {
@@ -79,7 +80,6 @@ func (a *App) writeComposeAliases(hosts []HostEntry) error {
 }
 
 func (a *App) writeSiteConfiguration(ctx context.Context, host HostEntry) error {
-	fmt.Fprintf(a.Out, "Processing host: %s\n", host.Name)
 	serveRoot := "/var/www/" + host.Name
 	if host.Type == "wp" || host.Type == "wordpress" {
 		line := fmt.Sprintf("* * * * * cd %s && php %s/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2\n", serveRoot, serveRoot)
@@ -127,7 +127,7 @@ func (a *App) writeSiteConfiguration(ctx context.Context, host HostEntry) error 
 		return err
 	}
 	if !exists {
-		fmt.Fprintf(a.Out, "Creating missing DB: %s\n", host.DB)
+		fmt.Fprintf(a.Out, "Creating database: %s\n", host.DB)
 		return a.createHostDatabase(ctx, host)
 	}
 	return nil

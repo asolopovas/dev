@@ -19,6 +19,11 @@ func (a *App) dockerCompose(ctx context.Context, args ...string) error {
 	return wrapCommandError("docker", all, a.Runner.Run(ctx, "docker", all...))
 }
 
+func (a *App) dockerComposeQuiet(ctx context.Context, args ...string) error {
+	all := a.composeArgs(args...)
+	return wrapCommandError("docker", all, a.runQuiet(ctx, "docker", all...))
+}
+
 func (a *App) dockerComposeOutput(ctx context.Context, args ...string) ([]byte, error) {
 	all := a.composeArgs(args...)
 	out, err := a.Runner.Output(ctx, "docker", all...)

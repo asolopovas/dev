@@ -31,8 +31,21 @@ func (r ExecRunner) Run(ctx context.Context, name string, args ...string) error 
 
 func (r ExecRunner) Output(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Stderr = r.Stderr
-	return cmd.Output()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil && stderr.Len() > 0 && r.Stderr != nil {
+		_, _ = r.Stderr.Write(stderr.Bytes())
+	}
+	return out, err
+}
+
+func (a *App) runQuiet(ctx context.Context, name string, args ...string) error {
+	out, err := a.Runner.Output(ctx, name, args...)
+	if err != nil && len(out) > 0 && a.Err != nil {
+		_, _ = a.Err.Write(out)
+	}
+	return err
 }
 
 func (r ExecRunner) Pipe(ctx context.Context, input []byte, name string, args ...string) ([]byte, error) {

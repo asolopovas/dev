@@ -96,7 +96,7 @@ func TestBinaryWorkflowE2EWithFakeTools(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(scriptDir, "db-backup.sql.gz")); err != nil {
 		t.Fatal(err)
 	}
-	assertFileContains(t, logPath, "composer create-project --prefer-dist laravel/laravel")
+	assertFileContains(t, logPath, "composer create-project --quiet --prefer-dist laravel/laravel")
 }
 
 func writeTestFile(t *testing.T, path string, content string) {

@@ -64,7 +64,6 @@ func (a *App) addHostRedirects(ctx context.Context, hosts []string) error {
 }
 
 func (a *App) removeHostRedirect(ctx context.Context, host string) error {
-	fmt.Fprintf(a.Out, "Removing host redirection for %q\n", host)
 	wsl, _ := isWSL()
 	if wsl {
 		return a.runHostMappingCmdletForHosts(ctx, "Remove-HostnameMapping", []string{host})

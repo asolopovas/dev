@@ -117,7 +117,7 @@ web build-webconf
 
 WordPress scaffolding downloads `latest-en_GB.tar.gz` into `WEB_ROOT` if needed, extracts it into the host directory, and fills `wp-config.php` with database values.
 
-Laravel scaffolding runs `composer create-project --prefer-dist laravel/laravel`, updates `.env`, adds the host, rebuilds config, and runs `artisan migrate --force` through the `franken_php` container.
+Laravel scaffolding runs `composer create-project --quiet --prefer-dist laravel/laravel`, updates `.env`, adds the host, rebuilds config, and runs `artisan migrate --force --quiet` through the `franken_php` container.
 
 ## SSL
 
