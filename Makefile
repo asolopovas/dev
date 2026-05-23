@@ -1,7 +1,7 @@
 IMAGE   ?= asolopovas/franken-php
 TAG     ?= latest
 
-.PHONY: help build push pull install test test-integration test-all lint
+.PHONY: help build push pull install install-go test test-go test-integration test-all lint build-go
 
 help:
 	@printf "\033[1mUsage:\033[0m make \033[36m<target>\033[0m\n\n"
@@ -22,8 +22,21 @@ install: ## Symlink web CLI and fish completions
 	ln -sf $(CURDIR)/web.completions.fish $(HOME)/.config/fish/completions/web.fish
 	@printf "Installed: web -> %s/web.sh\n" $(CURDIR)
 
+build-go:
+	@mkdir -p bin
+	go build -o bin/web ./cmd/web
+
+install-go: build-go
+	@mkdir -p $(HOME)/.local/bin
+	ln -sf $(CURDIR)/bin/web $(HOME)/.local/bin/web
+	$(CURDIR)/bin/web completion install
+	@printf "Installed: web -> %s/bin/web\n" $(CURDIR)
+
 test: ## Run unit tests
 	@bats tests/unit/
+
+test-go:
+	@go test ./...
 
 test-integration: ## Run integration tests (requires running services)
 	@bats tests/integration/

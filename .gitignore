@@ -14,3 +14,5 @@ templates.yml
 *.log
 crontab
 web-hosts.json
+.pi-lens/
+bin/
