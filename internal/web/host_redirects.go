@@ -11,7 +11,7 @@ import (
 
 func (a *App) hostRedirectExists(host string) bool {
 	wsl, _ := isWSL()
-	path := "/etc/hosts"
+	path := a.Config.ResolvedValues().Hosts.LinuxHostsFile
 	if wsl {
 		path = windowsHostsFilePath()
 	}
@@ -21,7 +21,7 @@ func (a *App) hostRedirectExists(host string) bool {
 	}
 	escaped := regexp.QuoteMeta(host)
 	if wsl {
-		re := regexp.MustCompile(`(?m)^\s*127\.0\.0\.1.*` + escaped + `(?:\s+|$)`)
+		re := regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(a.Config.ResolvedValues().Hosts.Loopback) + `.*` + escaped + `(?:\s+|$)`)
 		return re.Match(data)
 	}
 	re := regexp.MustCompile(`(?m)^[^#]*\s` + escaped + `(?:\s|$)`)
@@ -64,11 +64,12 @@ func (a *App) addHostRedirects(ctx context.Context, hosts []string) error {
 	}
 	var b strings.Builder
 	for _, host := range pending {
-		b.WriteString("127.0.0.1 ")
+		b.WriteString(a.Config.ResolvedValues().Hosts.Loopback)
+		b.WriteByte(' ')
 		b.WriteString(host)
 		b.WriteByte('\n')
 	}
-	cmd := exec.CommandContext(ctx, "sudo", "tee", "-a", "/etc/hosts")
+	cmd := exec.CommandContext(ctx, "sudo", "tee", "-a", a.Config.ResolvedValues().Hosts.LinuxHostsFile)
 	cmd.Stdin = strings.NewReader(b.String())
 	cmd.Stdout = ioDiscard{}
 	cmd.Stderr = a.Err
@@ -86,11 +87,14 @@ func (a *App) removeHostRedirect(ctx context.Context, host string) error {
 		}
 		return nil
 	}
-	return a.Runner.Run(ctx, "bash", "-lc", "grep -q '"+shellQuote(host)+"' /etc/hosts 2>/dev/null && sudo sed -i '/"+strings.ReplaceAll(host, ".", "\\.")+"/d' /etc/hosts || true")
+	hostsFile := shellQuote(a.Config.ResolvedValues().Hosts.LinuxHostsFile)
+	hostPattern := shellQuote(host)
+	sedPattern := shellQuote("/" + strings.ReplaceAll(host, ".", "\\.") + "/d")
+	return a.Runner.Run(ctx, "bash", "-lc", "grep -q "+hostPattern+" "+hostsFile+" 2>/dev/null && sudo sed -i "+sedPattern+" "+hostsFile+" || true")
 }
 
 func windowsHostsFilePath() string {
-	if path := os.Getenv("WEB_WINDOWS_HOSTS_PATH"); path != "" {
+	if path := os.Getenv(envWindowsHostsPath); path != "" {
 		return path
 	}
 	return "/mnt/c/Windows/System32/drivers/etc/hosts"

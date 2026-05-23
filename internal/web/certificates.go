@@ -10,57 +10,57 @@ import (
 )
 
 func hostCertificateExtensionFile(host string) string {
-	return fmt.Sprintf("authorityKeyIdentifier=keyid,issuer\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,nonRepudiation,keyEncipherment,dataEncipherment\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = %s\nIP.1 = 127.0.0.1\n", host)
+	return fmt.Sprintf("authorityKeyIdentifier=keyid,issuer\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,nonRepudiation,keyEncipherment,dataEncipherment\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = %s\nIP.1 = %s\n", host, hostLoopback)
 }
 
 func (a *App) generateRootCertificate(ctx context.Context, filename string, passphrase string) error {
+	values := a.Config.ResolvedValues()
 	if filename == "" {
-		filename = "rootCA"
+		filename = values.Certificates.RootName
 	}
 	if passphrase == "" {
-		passphrase = "default"
+		passphrase = values.Certificates.RootPassphrase
 	}
-	if err := os.MkdirAll(a.Config.CertsDir, 0755); err != nil {
+	if err := ensurePublicDir(a.Config.CertsDir); err != nil {
 		return err
 	}
 	key := filepath.Join(a.Config.CertsDir, filename+".key")
 	crt := filepath.Join(a.Config.CertsDir, filename+".crt")
 	subj := "/C=GB/ST=London/L=London/O=Lyntouch/OU=IT Department/CN=Lyntouch Self-Signed RootCA/emailAddress=info@lyntouch.com"
-	if err := a.runQuiet(ctx, "openssl", "genrsa", "-des3", "-passout", "pass:"+passphrase, "-out", key, "4096"); err != nil {
+	if err := a.runQuiet(ctx, values.Tools.OpenSSL, "genrsa", "-des3", "-passout", "pass:"+passphrase, "-out", key, "4096"); err != nil {
 		return err
 	}
-	if err := a.runQuiet(ctx, "openssl", "req", "-x509", "-new", "-nodes", "-passin", "pass:"+passphrase, "-key", key, "-sha256", "-days", "29200", "-subj", subj, "-out", crt); err != nil {
+	if err := a.runQuiet(ctx, values.Tools.OpenSSL, "req", "-x509", "-new", "-nodes", "-passin", "pass:"+passphrase, "-key", key, "-sha256", "-days", "29200", "-subj", subj, "-out", crt); err != nil {
 		return err
 	}
 	fmt.Fprintln(a.Out, "Root CA created successfully")
 	return nil
 }
 
-func (a *App) generateHostCertificate(ctx context.Context, host string) error {
-	if _, err := os.Stat(a.Config.RootCrt); err != nil {
-		if os.IsNotExist(err) {
-			if err := a.generateRootCertificate(ctx, "rootCA", "default"); err != nil {
-				return err
+func (a *App) ensureRootCertificate(ctx context.Context) error {
+	values := a.Config.ResolvedValues()
+	for _, path := range []string{a.Config.RootCrt, a.Config.RootKey} {
+		if _, err := os.Stat(path); err != nil {
+			if os.IsNotExist(err) {
+				return a.generateRootCertificate(ctx, values.Certificates.RootName, values.Certificates.RootPassphrase)
 			}
-		} else {
 			return err
 		}
 	}
-	if _, err := os.Stat(a.Config.RootKey); err != nil {
-		if os.IsNotExist(err) {
-			if err := a.generateRootCertificate(ctx, "rootCA", "default"); err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
+	return nil
+}
+
+func (a *App) generateHostCertificate(ctx context.Context, host string) error {
+	values := a.Config.ResolvedValues()
+	if err := a.ensureRootCertificate(ctx); err != nil {
+		return err
 	}
 	crt := filepath.Join(a.Config.CertsDir, host+".crt")
 	key := filepath.Join(a.Config.CertsDir, host+".key")
 	csr := filepath.Join(a.Config.CertsDir, host+".csr")
 	subj := fmt.Sprintf("/C=GB/ST=London/L=London/O=%s/OU=IT Department/CN=Lyntouch Self-Signed Host Certificate/emailAddress=info@lyntouch.com", host)
 	if _, err := os.Stat(key); os.IsNotExist(err) {
-		if err := a.runQuiet(ctx, "openssl", "req", "-new", "-sha256", "-nodes", "-out", csr, "-newkey", "rsa:2048", "-subj", subj, "-keyout", key); err != nil {
+		if err := a.runQuiet(ctx, values.Tools.OpenSSL, "req", "-new", "-sha256", "-nodes", "-out", csr, "-newkey", "rsa:2048", "-subj", subj, "-keyout", key); err != nil {
 			return err
 		}
 	} else if err != nil {
@@ -68,7 +68,7 @@ func (a *App) generateHostCertificate(ctx context.Context, host string) error {
 	}
 	if _, err := os.Stat(crt); os.IsNotExist(err) {
 		if _, err := os.Stat(csr); os.IsNotExist(err) {
-			if err := a.runQuiet(ctx, "openssl", "req", "-new", "-sha256", "-nodes", "-out", csr, "-newkey", "rsa:2048", "-subj", subj, "-key", key); err != nil {
+			if err := a.runQuiet(ctx, values.Tools.OpenSSL, "req", "-new", "-sha256", "-nodes", "-out", csr, "-newkey", "rsa:2048", "-subj", subj, "-key", key); err != nil {
 				return err
 			}
 		} else if err != nil {
@@ -89,7 +89,7 @@ func (a *App) generateHostCertificate(ctx context.Context, host string) error {
 			return err
 		}
 		defer os.Remove(extPath)
-		return a.runQuiet(ctx, "openssl", "x509", "-req", "-passin", "pass:default", "-in", csr, "-CA", a.Config.RootCrt, "-CAkey", a.Config.RootKey, "-CAcreateserial", "-out", crt, "-days", "500", "-sha256", "-extfile", extPath)
+		return a.runQuiet(ctx, values.Tools.OpenSSL, "x509", "-req", "-passin", "pass:"+values.Certificates.RootPassphrase, "-in", csr, "-CA", a.Config.RootCrt, "-CAkey", a.Config.RootKey, "-CAcreateserial", "-out", crt, "-days", "500", "-sha256", "-extfile", extPath)
 	} else if err != nil {
 		return err
 	}
@@ -97,29 +97,30 @@ func (a *App) generateHostCertificate(ctx context.Context, host string) error {
 }
 
 func (a *App) importRootCertificate(ctx context.Context, cert string, nick string) error {
+	values := a.Config.ResolvedValues()
 	wsl, err := isWSL()
 	if err == nil && wsl {
-		return errors.New("Chrome root CA import is not supported on WSL")
+		return errors.New("chrome root CA import is not supported on WSL")
 	}
 	if _, err := os.Stat(cert); err != nil {
 		return err
 	}
 	der := cert + ".der"
-	if err := a.runQuiet(ctx, "openssl", "x509", "-outform", "der", "-in", cert, "-out", der); err != nil {
+	if err := a.runQuiet(ctx, values.Tools.OpenSSL, "x509", "-outform", "der", "-in", cert, "-out", der); err != nil {
 		return err
 	}
 	home, _ := os.UserHomeDir()
 	db := filepath.Join(home, ".pki", "nssdb")
 	if _, err := os.Stat(db); os.IsNotExist(err) {
-		if err := os.MkdirAll(db, 0755); err != nil {
+		if err := ensurePublicDir(db); err != nil {
 			return err
 		}
-		if err := a.Runner.Run(ctx, "certutil", "-N", "-d", db); err != nil {
+		if err := a.Runner.Run(ctx, values.Tools.Certutil, "-N", "-d", db); err != nil {
 			return err
 		}
 	}
-	_ = a.Runner.Run(ctx, "certutil", "-d", "sql:"+db, "-D", "-n", nick)
-	if err := a.Runner.Run(ctx, "certutil", "-d", "sql:"+db, "-A", "-t", "C,,", "-n", nick, "-i", der); err != nil {
+	_ = a.Runner.Run(ctx, values.Tools.Certutil, "-d", "sql:"+db, "-D", "-n", nick)
+	if err := a.Runner.Run(ctx, values.Tools.Certutil, "-d", "sql:"+db, "-A", "-t", "C,,", "-n", nick, "-i", der); err != nil {
 		return err
 	}
 	fmt.Fprintf(a.Out, "Certificate imported to Chrome/Brave with nickname: %s\n", nick)

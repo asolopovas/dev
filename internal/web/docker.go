@@ -7,7 +7,7 @@ import (
 )
 
 func (a *App) composeArgs(args ...string) []string {
-	out := []string{"compose"}
+	out := []string{dockerComposeSubcommand}
 	for _, file := range a.Config.ComposeFiles {
 		out = append(out, "-f", file)
 	}
@@ -16,25 +16,29 @@ func (a *App) composeArgs(args ...string) []string {
 
 func (a *App) dockerCompose(ctx context.Context, args ...string) error {
 	all := a.composeArgs(args...)
-	return wrapCommandError("docker", all, a.Runner.Run(ctx, "docker", all...))
+	docker := a.Config.ResolvedValues().Tools.Docker
+	return wrapCommandError(docker, all, a.Runner.Run(ctx, docker, all...))
 }
 
 func (a *App) dockerComposeQuiet(ctx context.Context, args ...string) error {
 	all := a.composeArgs(args...)
-	return wrapCommandError("docker", all, a.runQuiet(ctx, "docker", all...))
+	docker := a.Config.ResolvedValues().Tools.Docker
+	return wrapCommandError(docker, all, a.runQuiet(ctx, docker, all...))
 }
 
 func (a *App) dockerComposeOutput(ctx context.Context, args ...string) ([]byte, error) {
 	all := a.composeArgs(args...)
-	out, err := a.Runner.Output(ctx, "docker", all...)
-	return out, wrapCommandError("docker", all, err)
+	docker := a.Config.ResolvedValues().Tools.Docker
+	out, err := a.Runner.Output(ctx, docker, all...)
+	return out, wrapCommandError(docker, all, err)
 }
 
 func (a *App) requireDocker(ctx context.Context) error {
-	if !commandExists("docker") {
-		return errors.New("docker is not installed")
+	docker := a.Config.ResolvedValues().Tools.Docker
+	if !commandExists(docker) {
+		return fmt.Errorf("%s is not installed", docker)
 	}
-	if _, err := a.Runner.Output(ctx, "docker", "info"); err != nil {
+	if _, err := a.Runner.Output(ctx, docker, dockerInfoSubcommand); err != nil {
 		return errors.New("docker daemon is not running")
 	}
 	return nil

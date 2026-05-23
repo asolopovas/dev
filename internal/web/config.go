@@ -17,20 +17,22 @@ type Config struct {
 	RootKey          string
 	RootCrt          string
 	ComposeFiles     []string
+	Values           AppValues
 }
 
 func LoadConfig() Config {
 	home, _ := os.UserHomeDir()
-	webRoot := getenv("WEB_ROOT", filepath.Join(home, "www"))
-	scriptDir := getenv("SCRIPT_DIR", filepath.Join(home, "www", "dev"))
-	backendDir := getenv("BACKEND_DIR", filepath.Join(scriptDir, "franken_php"))
+	webRoot := getenv(envWebRoot, filepath.Join(home, "www"))
+	scriptDir := getenv(envScriptDir, filepath.Join(home, "www", "dev"))
+	values := LoadAppValues(scriptDir)
+	backendDir := getenv(envBackendDir, filepath.Join(scriptDir, values.Services.FrankenPHP))
 	backendConfigDir := filepath.Join(backendDir, "config")
 	backendSitesDir := filepath.Join(backendConfigDir, "sites")
-	hostsJSON := getenv("HOSTS_JSON", filepath.Join(scriptDir, "web-hosts.json"))
+	hostsJSON := getenv(envHostsJSON, filepath.Join(scriptDir, values.Files.HostsJSON))
 	certsDir := filepath.Join(backendConfigDir, "ssl")
-	composeFiles := []string{filepath.Join(scriptDir, "docker-compose.yml")}
-	templates := filepath.Join(scriptDir, "templates.yml")
-	if b, err := os.ReadFile(templates); err == nil && strings.Contains(string(b), "  franken_php:") {
+	composeFiles := []string{filepath.Join(scriptDir, values.Files.Compose)}
+	templates := filepath.Join(scriptDir, values.Files.Templates)
+	if b, err := os.ReadFile(templates); err == nil && strings.Contains(string(b), "  "+values.Services.FrankenPHP+":") {
 		composeFiles = append(composeFiles, templates)
 	}
 	return Config{
@@ -41,9 +43,10 @@ func LoadConfig() Config {
 		BackendSitesDir:  backendSitesDir,
 		HostsJSON:        hostsJSON,
 		CertsDir:         certsDir,
-		RootKey:          filepath.Join(certsDir, "rootCA.key"),
-		RootCrt:          filepath.Join(certsDir, "rootCA.crt"),
+		RootKey:          filepath.Join(certsDir, values.Certificates.RootName+".key"),
+		RootCrt:          filepath.Join(certsDir, values.Certificates.RootName+".crt"),
 		ComposeFiles:     composeFiles,
+		Values:           values,
 	}
 }
 

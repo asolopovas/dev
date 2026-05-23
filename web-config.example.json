@@ -1,0 +1,37 @@
+{
+    "services": {
+        "frankenPHP": "franken_php",
+        "mariadb": "mariadb",
+        "redis": "redis",
+        "phpMyAdmin": "phpmyadmin"
+    },
+    "files": {
+        "compose": "docker-compose.yml",
+        "templates": "templates.yml",
+        "crontab": "crontab",
+        "launch": "launch.json",
+        "caddyTemplate": "template.conf",
+        "databaseBackup": "db-backup.sql.gz",
+        "hostsJSON": "web-hosts.json",
+        "env": ".env"
+    },
+    "hosts": {
+        "phpMyAdmin": "phpmyadmin.test",
+        "loopback": "127.0.0.1",
+        "linuxHostsFile": "/etc/hosts",
+        "containerWebDir": "/var/www"
+    },
+    "tools": {
+        "docker": "docker",
+        "composer": "composer",
+        "curl": "curl",
+        "tar": "tar",
+        "openssl": "openssl",
+        "certutil": "certutil"
+    },
+    "wordpress": {
+        "archiveFile": "wordpress.tar.gz",
+        "archiveURL": "https://en-gb.wordpress.org/latest-en_GB.tar.gz",
+        "extractDir": "wordpress"
+    }
+}

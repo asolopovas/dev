@@ -31,7 +31,7 @@ func TestBinaryWorkflowE2EWithFakeTools(t *testing.T) {
 	writeTestFile(t, filepath.Join(scriptDir, "franken_php", "config", "template.conf"), "site ${APP_URL} root ${SERVE_ROOT}\n")
 	writeTestFile(t, filepath.Join(scriptDir, "franken_php", "config", "sites", "phpmyadmin.test.conf"), "phpmyadmin\n")
 	writeTestFile(t, filepath.Join(scriptDir, "launch.json"), "{\"name\":\"${HOSTNAME}\"}\n")
-	writeTestFile(t, filepath.Join(scriptDir, ".env"), "XDEBUG_MODE=debug\n")
+	writeTestFile(t, filepath.Join(scriptDir, ".env"), "XDEBUG_MODE=debug\nMYSQL_ROOT_PASSWORD=secret\n")
 	createWordPressArchive(t, filepath.Join(webRoot, "wordpress.tar.gz"))
 	logPath := filepath.Join(dir, "e2e.log")
 	fakeHosts := filepath.Join(dir, "hosts")

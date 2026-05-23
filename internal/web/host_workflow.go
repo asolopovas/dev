@@ -11,7 +11,7 @@ import (
 
 func (a *App) newHostWizard(ctx context.Context) error {
 	host := a.prompt("Hostname", "")
-	hostType := a.choose("Site type:", "wp", "laravel")
+	hostType := a.choose("Site type:", interactiveSiteTypeValues...)
 	db := a.prompt("Database name", MakeDBName(host, hostType))
 	fmt.Fprintf(a.Out, "\nHostname:   %s\nType:       %s\nDatabase:   %s\n\n", host, hostType, db)
 	if !a.confirm("Proceed?") {
@@ -27,10 +27,9 @@ func (a *App) newHost(ctx context.Context, host string, hostType string, dbName 
 	if !ValidHostname(host) {
 		return fmt.Errorf("invalid hostname %q. Use a hostname like example.test", host)
 	}
-	switch hostType {
-	case "wp", "wordpress", "laravel":
-	default:
-		return fmt.Errorf("invalid type %q. Use: wp, wordpress, or laravel", hostType)
+	siteType, err := ParseSiteType(hostType)
+	if err != nil {
+		return err
 	}
 	if dbName == "" {
 		dbName = MakeDBName(host, hostType)
@@ -42,17 +41,13 @@ func (a *App) newHost(ctx context.Context, host string, hostType string, dbName 
 	if _, ok := registry.Host(host); ok {
 		return fmt.Errorf("host %s already exists", host)
 	}
-	switch hostType {
-	case "wp", "wordpress":
+	if siteType.WordPress() {
 		if err := a.scaffoldWordPress(ctx, host, dbName); err != nil {
 			return err
 		}
-	case "laravel":
-		scheme := "http"
-		if registry.HTTPS {
-			scheme = "https"
-		}
-		if err := a.scaffoldLaravel(ctx, host, dbName, scheme); err != nil {
+	}
+	if siteType.Laravel() {
+		if err := a.scaffoldLaravel(ctx, host, dbName, schemeForHTTPS(registry.HTTPS)); err != nil {
 			return err
 		}
 	}
@@ -68,16 +63,15 @@ func (a *App) newHost(ctx context.Context, host string, hostType string, dbName 
 	if err := a.rebuildWebConfiguration(ctx); err != nil {
 		return err
 	}
-	if hostType == "laravel" {
+	values := a.Config.ResolvedValues()
+	if siteType.Laravel() {
 		fmt.Fprintln(a.Out, "Running database migrations")
-		if err := a.dockerComposeQuiet(ctx, "exec", "-T", "franken_php", "php", "/var/www/"+host+"/artisan", "migrate", "--force", "--quiet"); err != nil {
+		artisan := filepath.Join(values.Hosts.ContainerWebDir, host, "artisan")
+		if err := a.dockerComposeQuiet(ctx, "exec", "-T", values.Services.FrankenPHP, "php", artisan, "migrate", "--force", "--quiet"); err != nil {
 			return err
 		}
 	}
-	scheme := "http"
-	if registry.HTTPS {
-		scheme = "https"
-	}
+	scheme := schemeForHTTPS(registry.HTTPS)
 	fmt.Fprintf(a.Out, "Ready: %s://%s\n", scheme, host)
 	return nil
 }

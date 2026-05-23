@@ -43,7 +43,7 @@ func Execute(args []string, output io.Writer, errorOutput io.Writer, input io.Re
 
 func newBaseCommand(output io.Writer, errorOutput io.Writer, input io.Reader) *cobra.Command {
 	root := &cobra.Command{
-		Use:           "web",
+		Use:           commandNameWeb,
 		Short:         "Docker PHP development environment",
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -113,7 +113,7 @@ func completeSiteTypes(cmd *cobra.Command, args []string, toComplete string) ([]
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	var values []string
-	for _, value := range []string{"wp", "wordpress", "laravel"} {
+	for _, value := range siteTypeValues {
 		if strings.HasPrefix(value, toComplete) {
 			values = append(values, value)
 		}
@@ -150,7 +150,7 @@ func addHostCommands(root *cobra.Command, app *App) {
 		}
 		return app.newHost(ctx, args[0], hostType, "")
 	})
-	newHost.Flags().StringVarP(&hostType, "type", "t", "wp", "Site type")
+	newHost.Flags().StringVarP(&hostType, "type", "t", string(SiteTypeWordPressShort), "Site type")
 	_ = newHost.RegisterFlagCompletionFunc("type", completeSiteTypes)
 	root.AddCommand(newHost)
 	var skipConfirmation bool
@@ -169,8 +169,14 @@ func addHostCommands(root *cobra.Command, app *App) {
 }
 
 func addShellCommands(root *cobra.Command, app *App) {
-	root.AddCommand(dockerCommand(app, "bash", "Container Bash", "exec", "franken_php", "bash"))
-	root.AddCommand(dockerCommand(app, "fish", "Container Fish", "exec", "franken_php", "fish"))
+	addComposeCommands(root, app, shellCommandSpecs(app.Config))
+}
+
+func addComposeCommands(root *cobra.Command, app *App, specs []composeCommandSpec) {
+	for _, spec := range specs {
+		spec := spec
+		root.AddCommand(dockerCommand(app, spec.Use, spec.Short, spec.Args...))
+	}
 }
 
 func dockerCommand(app *App, use string, short string, composeArgs ...string) *cobra.Command {
@@ -186,10 +192,11 @@ func addSSLCommands(root *cobra.Command, app *App) {
 		if err := app.requireDocker(ctx); err != nil {
 			return err
 		}
-		if err := app.generateRootCertificate(ctx, "rootCA", "default"); err != nil {
+		values := app.Config.ResolvedValues()
+		if err := app.generateRootCertificate(ctx, values.Certificates.RootName, values.Certificates.RootPassphrase); err != nil {
 			return err
 		}
-		return app.dockerCompose(ctx, "restart", "franken_php")
+		return app.dockerCompose(ctx, "restart", values.Services.FrankenPHP)
 	}))
 	hostSSL := appCommand("hostssl <host>", "Generate host SSL", cobra.ExactArgs(1), func(ctx context.Context, args []string) error {
 		return app.generateHostCertificate(ctx, args[0])
@@ -197,12 +204,12 @@ func addSSLCommands(root *cobra.Command, app *App) {
 	hostSSL.ValidArgsFunction = app.completeConfiguredHosts
 	root.AddCommand(hostSSL)
 	root.AddCommand(appCommand("import-rootca", "Import root CA to Chrome", cobra.NoArgs, func(ctx context.Context, args []string) error {
-		return app.importRootCertificate(ctx, app.Config.RootCrt, "Lyntouch Root CA")
+		return app.importRootCertificate(ctx, app.Config.RootCrt, app.Config.ResolvedValues().Certificates.RootNickname)
 	}))
 }
 
 func addDatabaseCommands(root *cobra.Command, app *App) {
-	root.AddCommand(dockerCommand(app, "mysql", "MySQL client as root", "exec", "-e", "MYSQL_PWD=secret", "mariadb", "mariadb", "-uroot"))
+	addComposeCommands(root, app, databaseCommandSpecs(app.Config))
 	root.AddCommand(appCommand("db-backup", "Dump all databases to db-backup.sql.gz", cobra.NoArgs, func(ctx context.Context, args []string) error {
 		return app.backupDatabases(ctx)
 	}))
@@ -212,9 +219,7 @@ func addDatabaseCommands(root *cobra.Command, app *App) {
 }
 
 func addToolCommands(root *cobra.Command, app *App) {
-	root.AddCommand(dockerCommand(app, "redis-cli", "Redis CLI shell", "exec", "redis", "redis-cli"))
-	root.AddCommand(dockerCommand(app, "redis-flush", "Flush Redis", "exec", "redis", "redis-cli", "flushall"))
-	root.AddCommand(dockerCommand(app, "redis-monitor", "Monitor Redis", "exec", "redis", "redis-cli", "monitor"))
+	addComposeCommands(root, app, redisCommandSpecs(app.Config))
 	root.AddCommand(appCommand("debug [off|debug|profile]", "Set Xdebug mode", cobra.MaximumNArgs(1), func(ctx context.Context, args []string) error {
 		return app.setXdebugMode(ctx, args)
 	}))
@@ -271,10 +276,10 @@ func installCompletions(root *cobra.Command) error {
 	}
 	fishDir := filepath.Join(home, ".config", "fish", "completions")
 	bashDir := filepath.Join(home, ".local", "share", "bash-completion", "completions")
-	if err := os.MkdirAll(fishDir, 0755); err != nil {
+	if err := ensurePrivateDir(fishDir); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(bashDir, 0755); err != nil {
+	if err := ensurePrivateDir(bashDir); err != nil {
 		return err
 	}
 	fishFile := filepath.Join(fishDir, "web.fish")

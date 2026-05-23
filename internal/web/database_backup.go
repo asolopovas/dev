@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 )
 
@@ -12,7 +11,7 @@ func (a *App) backupDatabases(ctx context.Context) error {
 	if err := a.requireDocker(ctx); err != nil {
 		return err
 	}
-	out, err := a.dockerComposeOutput(ctx, "exec", "-T", "-e", "MYSQL_PWD=secret", "mariadb", "mariadb-dump", "-uroot", "--all-databases")
+	out, err := a.dockerComposeOutput(ctx, mysqlRootDumpArgs(a.Config)...)
 	if err != nil {
 		return err
 	}
@@ -20,8 +19,8 @@ func (a *App) backupDatabases(ctx context.Context) error {
 	if err := gzipData(&gz, out); err != nil {
 		return err
 	}
-	path := filepath.Join(a.Config.ScriptDir, "db-backup.sql.gz")
-	if err := os.WriteFile(path, gz.Bytes(), 0644); err != nil {
+	path := filepath.Join(a.Config.ScriptDir, a.Config.ResolvedValues().Files.DatabaseBackup)
+	if err := writePrivateFile(path, gz.Bytes()); err != nil {
 		return err
 	}
 	fmt.Fprintf(a.Out, "Backed up to %s\n", path)
@@ -32,13 +31,13 @@ func (a *App) restoreDatabases(ctx context.Context) error {
 	if err := a.requireDocker(ctx); err != nil {
 		return err
 	}
-	path := filepath.Join(a.Config.ScriptDir, "db-backup.sql.gz")
+	path := filepath.Join(a.Config.ScriptDir, a.Config.ResolvedValues().Files.DatabaseBackup)
 	data, err := gunzipFile(path)
 	if err != nil {
 		return err
 	}
-	args := a.composeArgs("exec", "-T", "-e", "MYSQL_PWD=secret", "mariadb", "mariadb", "-uroot")
-	out, err := a.Runner.Pipe(ctx, data, "docker", args...)
+	args := a.composeArgs(mysqlRootArgs(a.Config)...)
+	out, err := a.Runner.Pipe(ctx, data, a.Config.ResolvedValues().Tools.Docker, args...)
 	if len(out) > 0 {
 		_, _ = a.Out.Write(out)
 	}

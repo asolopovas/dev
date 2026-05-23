@@ -42,11 +42,14 @@ func TestScaffoldWordPressExtractsInsideWebRoot(t *testing.T) {
 		t.Skip("curl and tar are required")
 	}
 	dir := t.TempDir()
-	cfg := Config{WebRoot: filepath.Join(dir, "www")}
+	cfg := Config{WebRoot: filepath.Join(dir, "www"), ScriptDir: dir}
 	if err := os.MkdirAll(cfg.WebRoot, 0755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(cfg.WebRoot, "wordpress.tar.gz"), []byte("archive"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.ScriptDir, ".env"), []byte("MYSQL_ROOT_PASSWORD=secret\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	runner := &wpScaffoldRunner{}

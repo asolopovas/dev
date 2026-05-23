@@ -47,7 +47,8 @@ func (a *App) setXdebugMode(ctx context.Context, args []string) error {
 	if mode != "off" && mode != "debug" && mode != "profile" {
 		return fmt.Errorf("invalid Xdebug mode %q", mode)
 	}
-	path := filepath.Join(a.Config.ScriptDir, ".env")
+	values := a.Config.ResolvedValues()
+	path := filepath.Join(a.Config.ScriptDir, values.Files.Env)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -55,16 +56,16 @@ func (a *App) setXdebugMode(ctx context.Context, args []string) error {
 	lines := strings.Split(string(data), "\n")
 	found := false
 	for i, line := range lines {
-		if strings.HasPrefix(line, "XDEBUG_MODE=") {
-			lines[i] = "XDEBUG_MODE=" + mode
+		if strings.HasPrefix(line, envXdebugMode+"=") {
+			lines[i] = envXdebugMode + "=" + mode
 			found = true
 		}
 	}
 	if !found {
-		lines = append(lines, "XDEBUG_MODE="+mode)
+		lines = append(lines, envXdebugMode+"="+mode)
 	}
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0644); err != nil {
+	if err := writePrivateFile(path, []byte(strings.Join(lines, "\n"))); err != nil {
 		return err
 	}
-	return a.dockerCompose(ctx, "up", "-d", "--remove-orphans", "franken_php")
+	return a.dockerCompose(ctx, "up", "-d", "--remove-orphans", values.Services.FrankenPHP)
 }

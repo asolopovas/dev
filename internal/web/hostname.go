@@ -68,10 +68,10 @@ func MakeDBName(host string, hostType string) string {
 	if subDomain != "" && subDomain != mainDomain {
 		dbName = mainDomain + "_" + strings.ReplaceAll(subDomain, ".", "_")
 	}
-	if hostType == "wp" || hostType == "wordpress" {
-		dbName += "_wp"
-	} else {
-		dbName += "_db"
+	siteType, err := ParseSiteType(hostType)
+	if err != nil {
+		siteType = SiteTypeLaravel
 	}
+	dbName += siteType.DatabaseSuffix()
 	return SanitizeDBIdentifier(strings.ReplaceAll(dbName, ".", "_"))
 }

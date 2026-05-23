@@ -14,5 +14,6 @@ templates.yml
 *.log
 crontab
 web-hosts.json
+web-config.json
 .pi-lens/
 bin/

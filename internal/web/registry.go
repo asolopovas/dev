@@ -23,7 +23,7 @@ type HostEntry struct {
 func DefaultRegistry(cfg Config) Registry {
 	return Registry{
 		Output:   cfg.BackendSitesDir,
-		Template: cfg.BackendConfigDir + string(os.PathSeparator) + "template.conf",
+		Template: cfg.BackendConfigDir + string(os.PathSeparator) + cfg.ResolvedValues().Files.CaddyTemplate,
 		WebRoot:  cfg.WebRoot,
 		Hosts:    []HostEntry{},
 	}
