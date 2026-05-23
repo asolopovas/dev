@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func (a *App) buildWebconf(ctx context.Context) error {
+func (a *App) rebuildWebConfiguration(ctx context.Context) error {
 	registry, err := EnsureRegistry(a.Config)
 	if err != nil {
 		return err
@@ -40,22 +40,22 @@ func (a *App) buildWebconf(ctx context.Context) error {
 	for _, host := range validHosts {
 		allHosts = append(allHosts, host.Name)
 	}
-	if err := a.redirectAddBatch(ctx, allHosts); err != nil {
+	if err := a.addHostRedirects(ctx, allHosts); err != nil {
 		return err
 	}
 	if _, ok := registry.Host("phpmyadmin.test"); !ok {
-		if err := a.sslGenerateHost(ctx, "phpmyadmin.test"); err != nil {
+		if err := a.generateHostCertificate(ctx, "phpmyadmin.test"); err != nil {
 			return err
 		}
 	}
-	if err := a.writeTemplates(validHosts); err != nil {
+	if err := a.writeComposeAliases(validHosts); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(a.Config.ScriptDir, "crontab"), []byte{}, 0644); err != nil {
 		return err
 	}
 	for _, host := range validHosts {
-		if err := a.processHost(ctx, host); err != nil {
+		if err := a.writeSiteConfiguration(ctx, host); err != nil {
 			return err
 		}
 	}
@@ -63,7 +63,7 @@ func (a *App) buildWebconf(ctx context.Context) error {
 	return a.dockerCompose(ctx, "restart", "franken_php")
 }
 
-func (a *App) writeTemplates(hosts []HostEntry) error {
+func (a *App) writeComposeAliases(hosts []HostEntry) error {
 	var b strings.Builder
 	b.WriteString("services:\n")
 	b.WriteString("  franken_php:\n")
@@ -78,7 +78,7 @@ func (a *App) writeTemplates(hosts []HostEntry) error {
 	return os.WriteFile(filepath.Join(a.Config.ScriptDir, "templates.yml"), []byte(b.String()), 0644)
 }
 
-func (a *App) processHost(ctx context.Context, host HostEntry) error {
+func (a *App) writeSiteConfiguration(ctx context.Context, host HostEntry) error {
 	fmt.Fprintf(a.Out, "Processing host: %s\n", host.Name)
 	serveRoot := "/var/www/" + host.Name
 	if host.Type == "wp" || host.Type == "wordpress" {
@@ -95,7 +95,7 @@ func (a *App) processHost(ctx context.Context, host HostEntry) error {
 			return err
 		}
 	}
-	if err := a.sslGenerateHost(ctx, host.Name); err != nil {
+	if err := a.generateHostCertificate(ctx, host.Name); err != nil {
 		return err
 	}
 	if host.Type == "laravel" {
@@ -113,22 +113,22 @@ func (a *App) processHost(ctx context.Context, host HostEntry) error {
 	if err := os.WriteFile(filepath.Join(debugOut, "launch.json"), launch, 0644); err != nil {
 		return err
 	}
-	tmpl, err := os.ReadFile(filepath.Join(a.Config.BackendConfigDir, "template.conf"))
+	templateContent, err := os.ReadFile(filepath.Join(a.Config.BackendConfigDir, "template.conf"))
 	if err != nil {
 		return err
 	}
-	site := strings.ReplaceAll(string(tmpl), "${APP_URL}", host.Name)
+	site := strings.ReplaceAll(string(templateContent), "${APP_URL}", host.Name)
 	site = strings.ReplaceAll(site, "${SERVE_ROOT}", serveRoot)
 	if err := os.WriteFile(filepath.Join(a.Config.BackendSitesDir, host.Name+".conf"), []byte(site), 0644); err != nil {
 		return err
 	}
-	exists, err := a.dbExists(ctx, host.DB)
+	exists, err := a.databaseExists(ctx, host.DB)
 	if err != nil {
 		return err
 	}
 	if !exists {
 		fmt.Fprintf(a.Out, "Creating missing DB: %s\n", host.DB)
-		return a.dbCreate(ctx, host)
+		return a.createHostDatabase(ctx, host)
 	}
 	return nil
 }

@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-func sslExtFile(host string) string {
+func hostCertificateExtensionFile(host string) string {
 	return fmt.Sprintf("authorityKeyIdentifier=keyid,issuer\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,nonRepudiation,keyEncipherment,dataEncipherment\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = %s\nIP.1 = 127.0.0.1\n", host)
 }
 
-func (a *App) sslGenerateRoot(ctx context.Context, filename string, passphrase string) error {
+func (a *App) generateRootCertificate(ctx context.Context, filename string, passphrase string) error {
 	if filename == "" {
 		filename = "rootCA"
 	}
@@ -36,10 +36,10 @@ func (a *App) sslGenerateRoot(ctx context.Context, filename string, passphrase s
 	return nil
 }
 
-func (a *App) sslGenerateHost(ctx context.Context, host string) error {
+func (a *App) generateHostCertificate(ctx context.Context, host string) error {
 	if _, err := os.Stat(a.Config.RootCrt); err != nil {
 		if os.IsNotExist(err) {
-			if err := a.sslGenerateRoot(ctx, "rootCA", "default"); err != nil {
+			if err := a.generateRootCertificate(ctx, "rootCA", "default"); err != nil {
 				return err
 			}
 		} else {
@@ -48,7 +48,7 @@ func (a *App) sslGenerateHost(ctx context.Context, host string) error {
 	}
 	if _, err := os.Stat(a.Config.RootKey); err != nil {
 		if os.IsNotExist(err) {
-			if err := a.sslGenerateRoot(ctx, "rootCA", "default"); err != nil {
+			if err := a.generateRootCertificate(ctx, "rootCA", "default"); err != nil {
 				return err
 			}
 		} else {
@@ -79,7 +79,7 @@ func (a *App) sslGenerateHost(ctx context.Context, host string) error {
 			return err
 		}
 		extPath := ext.Name()
-		if _, err := ext.WriteString(sslExtFile(host)); err != nil {
+		if _, err := ext.WriteString(hostCertificateExtensionFile(host)); err != nil {
 			_ = ext.Close()
 			_ = os.Remove(extPath)
 			return err
@@ -96,7 +96,7 @@ func (a *App) sslGenerateHost(ctx context.Context, host string) error {
 	return nil
 }
 
-func (a *App) sslImportRoot(ctx context.Context, cert string, nick string) error {
+func (a *App) importRootCertificate(ctx context.Context, cert string, nick string) error {
 	wsl, err := isWSL()
 	if err == nil && wsl {
 		return errors.New("Chrome root CA import is not supported on WSL")

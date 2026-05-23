@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func (a *App) redirectExists(host string) bool {
+func (a *App) hostRedirectExists(host string) bool {
 	wsl, _ := isWSL()
 	path := "/etc/hosts"
 	if wsl {
@@ -28,17 +28,17 @@ func (a *App) redirectExists(host string) bool {
 	return re.Match(data)
 }
 
-func (a *App) redirectAdd(ctx context.Context, host string) error {
-	if a.redirectExists(host) {
+func (a *App) addHostRedirect(ctx context.Context, host string) error {
+	if a.hostRedirectExists(host) {
 		return nil
 	}
-	return a.redirectAddBatch(ctx, []string{host})
+	return a.addHostRedirects(ctx, []string{host})
 }
 
-func (a *App) redirectAddBatch(ctx context.Context, hosts []string) error {
+func (a *App) addHostRedirects(ctx context.Context, hosts []string) error {
 	pending := make([]string, 0, len(hosts))
 	for _, host := range hosts {
-		if host != "" && !a.redirectExists(host) {
+		if host != "" && !a.hostRedirectExists(host) {
 			pending = append(pending, host)
 		}
 	}
@@ -48,7 +48,7 @@ func (a *App) redirectAddBatch(ctx context.Context, hosts []string) error {
 	fmt.Fprintf(a.Out, "Adding host redirections: %s\n", strings.Join(pending, " "))
 	wsl, _ := isWSL()
 	if wsl {
-		return a.runHostMappingCmdletBatch(ctx, "New-HostnameMapping", pending)
+		return a.runHostMappingCmdletForHosts(ctx, "New-HostnameMapping", pending)
 	}
 	var b strings.Builder
 	for _, host := range pending {
@@ -63,16 +63,16 @@ func (a *App) redirectAddBatch(ctx context.Context, hosts []string) error {
 	return cmd.Run()
 }
 
-func (a *App) redirectRemove(ctx context.Context, host string) error {
+func (a *App) removeHostRedirect(ctx context.Context, host string) error {
 	fmt.Fprintf(a.Out, "Removing host redirection for %q\n", host)
 	wsl, _ := isWSL()
 	if wsl {
-		return a.runHostMappingCmdletBatch(ctx, "Remove-HostnameMapping", []string{host})
+		return a.runHostMappingCmdletForHosts(ctx, "Remove-HostnameMapping", []string{host})
 	}
 	return a.Runner.Run(ctx, "bash", "-lc", "grep -q '"+shellQuote(host)+"' /etc/hosts 2>/dev/null && sudo sed -i '/"+strings.ReplaceAll(host, ".", "\\.")+"/d' /etc/hosts || true")
 }
 
-func (a *App) runHostMappingCmdletBatch(ctx context.Context, cmdlet string, hosts []string) error {
+func (a *App) runHostMappingCmdletForHosts(ctx context.Context, cmdlet string, hosts []string) error {
 	if len(hosts) == 0 {
 		return nil
 	}

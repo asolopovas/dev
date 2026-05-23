@@ -11,7 +11,7 @@ import (
 func TestWriteTemplates(t *testing.T) {
 	dir := t.TempDir()
 	app := &App{Config: Config{ScriptDir: dir}, Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}
-	if err := app.writeTemplates([]HostEntry{{Name: "bar.test"}, {Name: "foo.test"}}); err != nil {
+	if err := app.writeComposeAliases([]HostEntry{{Name: "bar.test"}, {Name: "foo.test"}}); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "templates.yml"))
@@ -27,10 +27,10 @@ func TestWriteTemplates(t *testing.T) {
 }
 
 func TestSSLExtFile(t *testing.T) {
-	content := sslExtFile("myhost.test")
+	content := hostCertificateExtensionFile("myhost.test")
 	for _, want := range []string{"DNS.1 = myhost.test", "IP.1 = 127.0.0.1", "subjectAltName"} {
 		if !strings.Contains(content, want) {
-			t.Fatalf("sslExtFile missing %q", want)
+			t.Fatalf("hostCertificateExtensionFile missing %q", want)
 		}
 	}
 }

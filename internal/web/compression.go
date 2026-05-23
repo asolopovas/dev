@@ -33,7 +33,7 @@ func gunzipFile(path string) ([]byte, error) {
 	return io.ReadAll(gz)
 }
 
-func (a *App) setDebugMode(ctx context.Context, args []string) error {
+func (a *App) setXdebugMode(ctx context.Context, args []string) error {
 	if err := a.requireDocker(ctx); err != nil {
 		return err
 	}
