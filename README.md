@@ -1,113 +1,104 @@
 # web.sh
 
-Docker-based PHP development environment for WordPress and Laravel. One CLI manages the stack, scaffolds sites, wires up local DNS, and issues SSL certificates from a local root CA.
+Docker-based PHP development environment for local WordPress and Laravel work. One Bash CLI manages Docker Compose services, local hostnames, SSL certificates, database provisioning, and project scaffolding.
 
-**License:** MIT · **Shell:** Bash (Fish completions optional) · **Platforms:** Linux, WSL2
+**License:** MIT · **Runtime:** Bash + Docker Compose · **Platforms:** Linux, WSL2
 
-## Features
+## What it includes
 
-- **FrankenPHP** (Caddy + PHP 8.4) with Xdebug, MariaDB, Redis, PhpMyAdmin, Mailpit, Typesense
-- Optional self-signed SSL with a custom root CA (HTTP serves by default)
-- WordPress and Laravel scaffolding with automatic database provisioning
-- Local domain redirection on Linux and WSL (single batched UAC prompt on Windows)
-- Node.js, Bun, Composer, Supercronic, ripgrep/fd/fzf preinstalled in the container
-- PHP ini values use native `${ENV_VAR}` interpolation (no runtime sed)
+- FrankenPHP with Caddy, PHP 8.4, Xdebug, Composer, Node.js, Bun, Supercronic, ripgrep, fd, and fzf
+- MariaDB, Redis, PhpMyAdmin, Mailpit, and Typesense
+- WordPress and Laravel host scaffolding with per-site databases
+- Local hostname redirection for Linux and WSL2
+- Optional local root CA and host certificates
+- Bats unit/integration tests and ShellCheck linting
 
 ## Requirements
 
-Docker, Docker Compose, `jq`, `curl`, `tar`, `openssl`, [`gum`](https://github.com/charmbracelet/gum). Fish shell optional for completions. For contributing: `bats-core`, `shellcheck`.
+Required: Docker, Docker Compose, Bash, `curl`, `tar`, `openssl`, and `jq`.
 
-## Quick Start
+Recommended: [`gum`](https://github.com/charmbracelet/gum) for prompts/spinners/tables, Fish for completions, `bats-core` and `shellcheck` for contributing.
+
+Laravel scaffolding also expects `composer` on the host.
+
+## Quick start
 
 ```sh
-git clone https://github.com/asolopovas/dev.git web && cd web
+mkdir -p "$HOME/www"
+git clone https://github.com/asolopovas/dev.git "$HOME/www/dev"
+cd "$HOME/www/dev"
 cp .env.example .env
-./web.sh install                     # symlink CLI + fish completions
-web new-host example.test -t wp      # scaffold WordPress site
-web new-host api.test    -t laravel  # scaffold Laravel project
-web up                               # start services
+make install
+web up
+web build-webconf
+web new-host example.test -t wp
 ```
 
-Then open `http://example.test`. Run `web rootssl && web import-rootca` once if you want trusted HTTPS.
+Open `http://example.test`.
 
-## Commands
-
-| Command | Description |
-|---|---|
-| `up` / `stop` / `restart` `[service]` | Manage Docker services |
-| `down` | Stop and remove the entire stack |
-| `build [service] [--no-cache]` | Build Docker images |
-| `ps [service]` | Container status (gum table) |
-| `log <service>` | Tail service logs |
-| `new-host [host] [-t wp\|laravel]` | Create site (wizard or flags) |
-| `remove-host [host]` | Remove site (multi-select or by name) |
-| `build-webconf` | Regenerate Caddy configs |
-| `bash` / `fish` | Container shell access |
-| `rootssl` | Generate local root CA |
-| `hostssl <host>` | Issue a host certificate |
-| `import-rootca` | Trust the root CA in Chrome (Linux) |
-| `mysql` | MariaDB client as root |
-| `db-backup` / `db-restore` | Dump / restore all databases |
-| `redis-cli` / `redis-flush` / `redis-monitor` | Redis management |
-| `debug [off\|debug\|profile]` | Set Xdebug mode |
-| `install` | Symlink CLI and Fish completions |
-| `dir` | Print script directory |
-
-## Services
-
-| Service | Image | Ports |
-|---|---|---|
-| `franken_php` (Caddy + PHP 8.4 + Xdebug) | `dunglas/frankenphp:1.11.1-php8.4` | 80, 443, 443/udp, 8080 |
-| `mariadb` | `mariadb:lts` | 3306 |
-| `redis` | `redis:7.4.2-bookworm` | 6379 |
-| `phpmyadmin` (reverse-proxied by Caddy at `phpmyadmin.test`) | `phpmyadmin:fpm-alpine` | none |
-| `mailpit` | `axllent/mailpit` | 1025 (SMTP), 8025 (UI) |
-| `typesense` | `typesense/typesense:29.0` | 8108 |
-
-## Configuration
-
-Edit `.env` (see `.env.example`):
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `MAPDIR` | `..` | Web root mapping |
-| `MYSQL_ROOT_PASSWORD` | `secret` | DB root password |
-| `REDIS_PASSWORD` | `redis` | Redis auth |
-| `XDEBUG_MODE` | `debug` | `off`, `debug`, or `profile` |
-| `XDEBUG_IDEKEY` | `XDEBUG` | IDE key |
-| `XDEBUG_HOST` | `host.docker.internal` | Debugger host |
-| `UID` / `GID` | `1000` | Container user mapping |
-
-## Project Structure
-
-```
-web.sh                  Main CLI
-docker-compose.yml      Service definitions
-Makefile                Build / test / lint targets
-web-hosts.json          Host configuration (gitignored)
-franken_php/            Dockerfile, Caddy configs, SSL certs
-mariadb/  redis/        Service configs
-tests/                  Bats test suite (unit + integration)
-AGENTS.md               Contributor guide
-```
-
-## Testing & Contributing
+For trusted HTTPS, run this once, then restart the browser:
 
 ```sh
-make lint               # shellcheck
-make test               # bats unit tests
-make test-integration   # requires services running
+web rootssl
+web import-rootca
 ```
 
-Read [AGENTS.md](./AGENTS.md) before making changes, especially the **no-comments-in-code** rule and test-stub conventions in `tests/test_helper.bash`.
+Without installation, replace `web` with `./web.sh`. The default paths assume the checkout lives at `$HOME/www/dev` and projects live under `$HOME/www`.
 
-## Troubleshooting
+## Common commands
 
-- **Port 80/443 in use.** Stop host-level nginx/apache or change the Caddy ports in `docker-compose.yml`.
-- **WSL hosts file not updating.** Accept the single UAC prompt; `build-webconf` batches all hosts into one PowerShell elevation.
-- **Browser shows untrusted SSL.** Run `web rootssl` once, then `web import-rootca` (Chrome on Linux). Restart the browser.
-- **Xdebug not connecting.** Confirm `XDEBUG_HOST=host.docker.internal` and the IDE is listening on 9003 with key `XDEBUG`.
-- **`gum` not found.** Install from https://github.com/charmbracelet/gum; the CLI falls back to plain prompts but tables look nicer with it.
+| Command | Purpose |
+|---|---|
+| `web up [service]` | Start all services or one service |
+| `web stop [service]` | Stop all services or one service |
+| `web restart [service]` | Restart all services or one service |
+| `web down` | Stop and remove the stack |
+| `web build [service] [--no-cache]` | Build images and recreate containers |
+| `web ps [service]` | Show container status |
+| `web log <service>` | Follow service logs |
+| `web new-host [host] [-t wp\|laravel]` | Create a WordPress or Laravel site |
+| `web remove-host [host]` | Remove a site, database, certs, and host mapping |
+| `web build-webconf` | Regenerate generated Caddy, SSL, cron, and alias files |
+| `web bash` / `web fish` | Open a shell in `franken_php` |
+| `web mysql` | Open MariaDB as root |
+| `web db-backup` / `web db-restore` | Dump or restore all databases |
+| `web redis-cli` / `web redis-flush` / `web redis-monitor` | Manage Redis |
+| `web debug [off\|debug\|profile]` | Change Xdebug mode |
+
+See [docs/OPERATIONS.md](./docs/OPERATIONS.md) for full operating notes.
+
+## Service endpoints
+
+| Service | Endpoint |
+|---|---|
+| FrankenPHP / Caddy | `http://<host>`, `https://<host>`, ports 80/443/8080 |
+| MariaDB | `127.0.0.1:3306` |
+| Redis | `127.0.0.1:6379` |
+| PhpMyAdmin | `http://phpmyadmin.test` |
+| Mailpit | SMTP `127.0.0.1:1025`, UI `http://127.0.0.1:8025` |
+| Typesense | `http://127.0.0.1:8108`, API key `xyz` |
+
+## Project map
+
+| Path | Role |
+|---|---|
+| `web.sh` | Main CLI and orchestration logic |
+| `docker-compose.yml` | Local service graph |
+| `franken_php/` | PHP/Caddy image, entrypoint, config, templates, cert output |
+| `mariadb/`, `redis/` | Service configuration |
+| `tests/` | Bats unit and integration tests |
+| `docs/` | Maintained project knowledge base |
+| `AGENTS.md` | Compact agent entry point and documentation map |
+
+## Contributing
+
+```sh
+make lint
+make test
+make test-integration
+```
+
+Read [AGENTS.md](./AGENTS.md) first, then [docs/ENGINEERING.md](./docs/ENGINEERING.md). The repository has strict agent-facing rules, including no comments in code and isolated unit tests that must not touch Docker or host files.
 
 ## License
 

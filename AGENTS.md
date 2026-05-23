@@ -1,83 +1,50 @@
 # AGENTS.md
 
-This file provides guidance to AI coding agents when working with code in this repository.
+Compact guidance for coding agents. Keep this file short; detailed project knowledge lives under [`docs/`](./docs/).
 
-## Project Overview
+## Project
 
-**web.sh** is a Docker-based PHP development environment for local WordPress and Laravel development. It orchestrates FrankenPHP (Caddy + PHP 8.4), MariaDB, Redis, PhpMyAdmin, Mailpit, and Typesense via Docker Compose, with automated SSL, host redirection, database provisioning, and project scaffolding through a single CLI.
+`web.sh` is a Docker-based PHP development environment for local WordPress and Laravel work. A single Bash CLI orchestrates FrankenPHP/Caddy/PHP 8.4, MariaDB, Redis, PhpMyAdmin, Mailpit, Typesense, local hostnames, SSL, database provisioning, and site scaffolding.
 
-## Commands
+## Read next
 
-### Testing & Lint
-```bash
-make test                       # unit tests only (bats tests/unit/)
-make test-integration           # integration tests (requires services running)
-make test-all                   # tests.sh: unit + integration if franken_php is up
-make lint                       # shellcheck with project-specific exclusions
-bats tests/unit/main.bats       # run a single test file
-bats -f "main help" tests/unit/ # filter by test name
+| Need | Source of truth |
+|---|---|
+| User setup, commands, services, SSL, databases, troubleshooting | [`docs/OPERATIONS.md`](./docs/OPERATIONS.md) |
+| Runtime architecture, generated files, host config, WSL flow | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) |
+| Tests, linting, style, safe edit rules, known traps | [`docs/ENGINEERING.md`](./docs/ENGINEERING.md) |
+| Documentation map and maintenance rules | [`docs/README.md`](./docs/README.md) |
+
+## Non-negotiables
+
+- Do not add comments to code. No inline, trailing, block, YAML, Dockerfile, Bash, or config comments.
+- Keep `web.sh` sourceable. Do not break the `if [[ "${BASH_SOURCE[0]}" == "$0" ]]` guard.
+- Unit tests must not call real Docker, mutate `/etc/hosts`, or mutate the Windows hosts file.
+- Use the existing `hosts_json_*` helpers for `web-hosts.json`; keep writes atomic through `hosts_json_write()`.
+- `build_webconf` must batch host redirects through `redirect_add_batch`.
+- `dc_ps` should keep the single `$DC ps --format json` fast path, not per-service status calls.
+- PHP `.ini` files use native `${ENV_VAR}` interpolation. Do not replace this with runtime `sed` rewrites.
+- Generated files are outputs, not hand-maintained sources.
+
+## Validation
+
+```sh
+make lint
+make test
+make test-integration
 ```
-CI runs `make lint` then `make test` on push/PR to `main` (`.github/workflows/ci.yml`). The lint target disables specific shellcheck codes (`SC2086,SC2016,SC2034,SC2029,SC2120,SC2119,SC2318`) — match those exclusions when adding new code.
 
-Tests use [bats](https://github.com/bats-core/bats-core). `tests/test_helper.bash` sources `web.sh` (via the `BASH_SOURCE != $0` guard at the bottom of `web.sh`), redirects all path globals (`SCRIPT_DIR`, `WEB_ROOT`, `BACKEND_*`, `HOSTS_JSON`, `CERTS_DIR`) into a temp dir, and overrides these stubs after sourcing: `_has_gum`, `_HAS_GUM=0`, `select_option`, `spin`, `redirect_remove`, `redirect_add`, `redirect_add_batch`, `db_remove`, `db_exists`, `db_create`. New unit tests must work with these stubs — never call real Docker or touch `/etc/hosts`.
+Run `make test-integration` only when the Docker services required by the integration tests are available.
 
-### Common CLI Usage
-```bash
-./web.sh up                              # start all services
-./web.sh build [service] [--no-cache]    # rebuild images
-./web.sh new-host example.test -t wp     # create WordPress site
-./web.sh new-host api.test -t laravel    # create Laravel project
-./web.sh remove-host example.test        # remove site
-./web.sh build-webconf                   # regenerate all Caddy configs
-./web.sh debug debug                     # enable Xdebug
-./web.sh bash                            # shell into container
+## Common commands
+
+```sh
+./web.sh up
+./web.sh build [service] [--no-cache]
+./web.sh new-host example.test -t wp
+./web.sh new-host api.test -t laravel
+./web.sh remove-host example.test
+./web.sh build-webconf
+./web.sh debug debug
+./web.sh bash
 ```
-
-## Architecture
-
-### Single-script CLI (`web.sh`)
-
-All logic lives in one bash script (~600 lines) with `set -o errexit` and `set -o pipefail`. The `main()` function dispatches commands via a `case` statement. The script can be both executed directly and sourced (for testing) — controlled by the `if [[ "${BASH_SOURCE[0]}" == "$0" ]]` guard at the end. Do not break that guard or tests will execute `main` on source.
-
-### Configuration-driven host management
-
-`web-hosts.json` is the central configuration store. It holds an array of host entries (`name`, `type`, `db`) plus paths for output directories, templates, and web root. All JSON manipulation goes through `hosts_json_*()` helper functions using `jq`. The `hosts_json_write()` pattern atomically writes via temp file + `mv`.
-
-### Auto-generated files (gitignored)
-
-When `build_webconf` runs, it generates per-host files from templates:
-- `franken_php/config/sites/*.conf` — Caddy server blocks from `template.conf`
-- `franken_php/config/ssl/*.key|.crt|.csr` — SSL certificates per host
-- `templates.yml` — Docker Compose network aliases
-- `crontab` — WordPress cron schedule for Supercronic
-
-### Database naming convention
-
-`make_db_name()` extracts the main domain, handles known second-level domains (`co.uk`, `gov.uk`, `com.br`, `co.jp`), and appends `_wp` or `_db` based on site type. Each host gets an isolated database and user with the same name.
-
-### Interactive UI via `gum`
-
-The script uses [gum](https://github.com/charmbracelet/gum) for styled prompts, spinners, and tables. All gum calls have non-interactive fallbacks (plain printf). `dc_action()` wraps docker compose verbs under a `gum spin`, then `dc_ps()` renders a static post-action snapshot via `gum table` from a single `compose ps --format json` call.
-
-### WSL support
-
-Host redirection works on both native Linux (`/etc/hosts`) and WSL (Windows hosts file via PowerShell `Hosts` module). WSL detection uses `/proc/version`. `_resolve_hosts_module_path()` caches the PowerShell module path to `${XDG_CACHE_HOME:-$HOME/.cache}/web-sh/wsl-hosts-module`. `_run_host_mapping_cmdlet_batch()` batches multiple host adds into a single elevated PowerShell session, so a `build_webconf` with N hosts triggers one UAC prompt instead of N. If the Hosts module is missing, `_install_hosts_module()` offers to `Install-Module -Scope CurrentUser` it.
-
-### PHP runtime configuration
-
-PHP `.ini` files in `franken_php/conf.d/` use native `${ENV_VAR}` interpolation (e.g. `xdebug.mode = ${XDEBUG_MODE}`). Env vars come from `.env` via docker compose; PHP substitutes them at startup. Changing `XDEBUG_MODE` is done with `web debug <mode>`, which edits `.env` and recreates the franken_php container so PHP re-reads the new env.
-
-### Docker service layout
-
-The `franken_php` container is the main service — it runs FrankenPHP (Caddy + PHP 8.4) as PID 1, plus Node.js (raw tarball), Bun, Composer, and Supercronic. `entrypoint.sh` is a sudo trampoline that ensures runtime log dirs exist (no-op when baked in by the image), runs an optional dotfiles symlink script, and starts supercronic if a crontab is present.
-
-## Code Style
-
-- **No comments in code.** Never add inline comments, block comments, or any other form of code commentary. The code must speak for itself through clear naming and structure. This applies to all file types (bash, YAML, Dockerfile, conf, etc.).
-
-## Key Patterns
-
-- **Error handling**: `die()` for fatal errors (exits 1), `warn()` for non-fatal, `require_*()` for precondition checks
-- **Spin wrappers**: `spin "message" command args...` shows a gum spinner or falls back to plain logging
-- **Docker Compose**: all DC calls go through `$DC` variable (`docker compose -f $SCRIPT_DIR/docker-compose.yml`)
-- **Test isolation**: tests source `web.sh`, then stub out external dependencies (`_has_gum`, `select_option`, `spin`, `redirect_remove`, `redirect_add`, `redirect_add_batch`, `db_remove`, `db_exists`, `db_create`) to run purely in-memory
