@@ -32,3 +32,15 @@ teardown() { common_teardown; }
     [[ "$status" -ne 0 ]]
     [[ "$output" == *"Option -t requires a value"* ]]
 }
+
+@test "parse_new_host_args rejects unknown options" {
+    run parse_new_host_args -f
+    [[ "$status" -ne 0 ]]
+    [[ "$output" == *"Unknown option '-f'"* ]]
+}
+
+@test "parse_new_host_args rejects invalid hostnames" {
+    run parse_new_host_args bad_host
+    [[ "$status" -ne 0 ]]
+    [[ "$output" == *"Invalid hostname 'bad_host'"* ]]
+}

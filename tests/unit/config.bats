@@ -103,3 +103,17 @@ teardown() { common_teardown; }
     [[ -f "$launch" ]]
     grep -q "debug.test" "$launch"
 }
+
+@test "build_webconf skips invalid host entries" {
+    ssl_generate_host() { :; }
+    hosts_json_write '.hosts += [{"name":"-f","type":"wp","db":"f_wp"},{"name":"valid.test","type":"wp","db":"valid_wp"}]'
+
+    DC="true"
+    run build_webconf
+
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == *"Skipping invalid host entry: -f"* ]]
+    [[ ! -f "$BACKEND_SITES_DIR/-f.conf" ]]
+    [[ -f "$BACKEND_SITES_DIR/valid.test.conf" ]]
+    ! grep -q -- "- -f" "$SCRIPT_DIR/templates.yml"
+}

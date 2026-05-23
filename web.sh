@@ -28,6 +28,21 @@ require_cmd()    { command -v "$1" &>/dev/null || die "$1 is not installed."; }
 require_host()   { [[ -n "${1:-}" ]] || die "No hostname specified. Usage: web $2 <hostname>"; }
 require_docker() { require_cmd docker; docker info &>/dev/null || die "Docker daemon is not running."; }
 ensure_jq()      { command -v jq &>/dev/null || { log "Installing jq..."; sudo apt update && sudo apt install -y jq; }; }
+
+valid_hostname() {
+    local host="$1" label
+    local -a labels
+    [[ -n "$host" && "$host" != -* && "$host" != *..* && "$host" != *[!A-Za-z0-9.-]* ]] || return 1
+    IFS='.' read -r -a labels <<< "$host"
+    for label in "${labels[@]}"; do
+        [[ -n "$label" && "$label" != -* && "$label" != *- && ${#label} -le 63 ]] || return 1
+    done
+}
+
+require_valid_hostname() {
+    require_host "${1:-}" "$2"
+    valid_hostname "$1" || die "Invalid hostname '$1'. Use a hostname like example.test."
+}
 ensure_gum() {
     ((_HAS_GUM)) && return 0
     log "Installing gum..."
@@ -133,6 +148,7 @@ hosts_json_write() {
 
 hosts_json_add() {
     local host_name="$1" host_type="$2" db_name="$3"
+    require_valid_hostname "$host_name" "new-host"
     [[ -n "$(hosts_json_get_host "$host_name")" ]] && { warn "Host $host_name already exists."; return 1; }
     hosts_json_write --arg hn "$host_name" --arg ht "$host_type" --arg db "$db_name" \
         '.hosts += [{name: $hn, type: $ht, db: $db}]'
@@ -390,8 +406,21 @@ build_webconf() {
     hosts_json_ensure_defaults || return 1
     find "$BACKEND_SITES_DIR" -type f ! -name 'phpmyadmin.test.conf' ! -name '.gitkeep' -delete
 
+    local host_rows=() row host_name host_type db serve_root
+    while IFS= read -r row; do
+        IFS=$'\t' read -r host_name host_type db <<< "$row"
+        if valid_hostname "$host_name"; then
+            host_rows+=("$row")
+        else
+            warn "Skipping invalid host entry: $host_name"
+        fi
+    done < <(hosts_json_query -r '.hosts[] | [.name, .type, .db] | @tsv')
+
     local all_hosts=("phpmyadmin.test")
-    mapfile -t -O 1 all_hosts < <(hosts_json_query -r '.hosts[].name')
+    for row in "${host_rows[@]}"; do
+        IFS=$'\t' read -r host_name host_type db <<< "$row"
+        all_hosts+=("$host_name")
+    done
     redirect_add_batch "${all_hosts[@]}"
 
     if ! jq -e '.hosts[] | select(.name == "phpmyadmin.test")' "$HOSTS_JSON" >/dev/null 2>&1; then
@@ -399,12 +428,12 @@ build_webconf() {
     fi
 
     { echo "services:"; echo "  franken_php:"; echo "    networks:"; echo "      dev_network:"; echo "        aliases:"
-      hosts_json_query -r '.hosts[].name' | while read -r name; do echo "          - $name"; done
+      for row in "${host_rows[@]}"; do IFS=$'\t' read -r host_name host_type db <<< "$row"; echo "          - $host_name"; done
     } > "$SCRIPT_DIR/templates.yml"
 
     : > "$SCRIPT_DIR/crontab"
-    local host_name host_type db serve_root
-    while IFS=$'\t' read -r host_name host_type db; do
+    for row in "${host_rows[@]}"; do
+        IFS=$'\t' read -r host_name host_type db <<< "$row"
         log "Processing host: $host_name"
         serve_root="/var/www/$host_name"
 
@@ -420,7 +449,7 @@ build_webconf() {
         sed -e "s|\${APP_URL}|${host_name}|g" -e "s|\${SERVE_ROOT}|${serve_root}|g" "$BACKEND_CONFIG_DIR/template.conf" > "$BACKEND_SITES_DIR/${host_name}.conf"
 
         db_exists "$db" || { log "Creating missing DB: $db"; db_create "$host_name"; }
-    done < <(hosts_json_query -r '.hosts[] | [.name, .type, .db] | @tsv')
+    done
 
     info "Finished building web configs. Restarting Caddy..."
     spin "Restarting Caddy..." $DC restart franken_php
@@ -457,7 +486,7 @@ scaffold_laravel() {
 
 new_host() {
     local host="$1" host_type="$2" db_name="${3:-}"
-    require_docker; ensure_jq; require_host "$host" "new-host"
+    require_docker; ensure_jq; require_valid_hostname "$host" "new-host"
     [[ -z "$db_name" ]] && db_name=$(make_db_name "$host" "$host_type")
     case "$host_type" in
         wp|wordpress) scaffold_wordpress "$host" "$db_name" ;;
@@ -515,9 +544,13 @@ dc_build() {
 parse_new_host_args() {
     HOST="" ; TYPE="wp"
     while [[ $# -gt 0 ]]; do
-        case "$1" in -t) [[ -n "${2:-}" ]] || die "Option -t requires a value (wp or laravel)."; TYPE="$2"; shift 2 ;; *) HOST="$1"; shift ;; esac
+        case "$1" in
+            -t|--type) [[ -n "${2:-}" ]] || die "Option $1 requires a value (wp or laravel)."; TYPE="$2"; shift 2 ;;
+            -*) die "Unknown option '$1'." ;;
+            *) [[ -z "$HOST" ]] || die "Unexpected argument '$1'."; HOST="$1"; shift ;;
+        esac
     done
-    require_host "$HOST" "new-host <hostname> -t <wp|laravel>"
+    require_valid_hostname "$HOST" "new-host <hostname> -t <wp|laravel>"
 }
 
 show_help() {
