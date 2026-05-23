@@ -14,7 +14,7 @@ This directory is the project knowledge base. Prefer short, linked documents ove
 
 - [`OPERATIONS.md`](./OPERATIONS.md): installation, commands, host lifecycle, SSL, database, Redis, Xdebug, `.env`, and troubleshooting.
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md): CLI shape, Docker service layout, generated files, host JSON model, database naming, WSL host mapping, PHP config, and container runtime.
-- [`ENGINEERING.md`](./ENGINEERING.md): test commands, CI, ShellCheck policy, Bats isolation, style rules, implementation patterns, and traps to avoid.
+- [`ENGINEERING.md`](./ENGINEERING.md): test commands, CI, Go formatting, test isolation, style rules, implementation patterns, and traps to avoid.
 
 ## Maintenance rules
 

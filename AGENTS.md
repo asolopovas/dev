@@ -4,7 +4,7 @@ Compact guidance for coding agents. Keep this file short; detailed project knowl
 
 ## Project
 
-`web.sh` is a Docker-based PHP development environment for local WordPress and Laravel work. A single Bash CLI orchestrates FrankenPHP/Caddy/PHP 8.4, MariaDB, Redis, PhpMyAdmin, Mailpit, Typesense, local hostnames, SSL, database provisioning, and site scaffolding.
+`web` is a Go CLI for a Docker-based PHP development environment for local WordPress and Laravel work. It orchestrates FrankenPHP/Caddy/PHP 8.4, MariaDB, Redis, PhpMyAdmin, Mailpit, Typesense, local hostnames, SSL, database provisioning, and site scaffolding.
 
 ## Read next
 
@@ -18,12 +18,11 @@ Compact guidance for coding agents. Keep this file short; detailed project knowl
 ## Non-negotiables
 
 - Do not add comments to code. No inline, trailing, block, YAML, Dockerfile, Bash, or config comments.
-- Keep `web.sh` sourceable. Do not break the `if [[ "${BASH_SOURCE[0]}" == "$0" ]]` guard.
 - Unit tests must not call real Docker, mutate `/etc/hosts`, or mutate the Windows hosts file.
-- Use the existing `hosts_json_*` helpers for `web-hosts.json`; keep writes atomic through `hosts_json_write()`.
-- `build_webconf` must batch host redirects through `redirect_add_batch`.
-- `dc_ps` should keep the single `$DC ps --format json` fast path, not per-service status calls.
-- PHP `.ini` files use native `${ENV_VAR}` interpolation. Do not replace this with runtime `sed` rewrites.
+- Keep `web-hosts.json` writes atomic through `SaveRegistry()`.
+- `rebuildWebConfiguration` must batch host redirects through `addHostRedirects`.
+- Do not add per-service Docker status probes in status rendering; prefer a single Compose `ps` call.
+- PHP `.ini` files use native `${ENV_VAR}` interpolation. Do not replace this with runtime rewrites.
 - Generated files are outputs, not hand-maintained sources.
 
 ## Validation
@@ -39,12 +38,12 @@ Run `make test-integration` only when the Docker services required by the integr
 ## Common commands
 
 ```sh
-./web.sh up
-./web.sh build [service] [--no-cache]
-./web.sh new-host example.test -t wp
-./web.sh new-host api.test -t laravel
-./web.sh remove-host example.test
-./web.sh build-webconf
-./web.sh debug debug
-./web.sh bash
+web up
+web build [service] [--no-cache]
+web new-host example.test -t wp
+web new-host api.test -t laravel
+web remove-host example.test
+web build-webconf
+web debug debug
+web bash
 ```

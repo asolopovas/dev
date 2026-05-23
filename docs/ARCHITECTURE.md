@@ -1,6 +1,6 @@
 # Architecture
 
-`web` is a Go CLI around Docker Compose. It keeps local PHP projects reproducible by deriving generated Caddy, SSL, cron, host-alias, and database state from a small host registry. `web.sh` remains as a legacy sourceable Bash CLI.
+`web` is a Go CLI around Docker Compose. It keeps local PHP projects reproducible by deriving generated Caddy, SSL, cron, host-alias, and database state from a small host registry.
 
 ## Top-level flow
 
@@ -12,14 +12,13 @@ web command
   -> buildWebconf regenerates runtime files from web-hosts.json
 ```
 
-`make install` builds the Go CLI and installs it to `/usr/local/bin/web`. `web.sh` sets `errexit` and `pipefail`. Tests source the script directly, so the final `BASH_SOURCE` guard must remain intact and `main()` must only run when the script is executed.
+`make install` builds the Go CLI and installs it to `/usr/local/bin/web`.
 
 ## Important paths
 
 | Path | Purpose |
 |---|---|
 | `cmd/web`, `internal/web` | Go CLI, orchestration, host management, SSL, DB helpers |
-| `web.sh` | Legacy sourceable Bash CLI |
 | `docker-compose.yml` | Service definitions and local ports |
 | `.env` | Compose environment values |
 | `web-hosts.json` | Local host registry, gitignored |
@@ -48,7 +47,7 @@ web command
 
 `build_webconf` initializes this file with defaults when it is missing. `new-host` writes through the JSON helpers and expects the registry to exist, so a fresh checkout should run `web build-webconf` once after services are started.
 
-All JSON reads and writes should go through `hosts_json_*()` helpers. `hosts_json_write()` writes to a temp file and moves it into place, keeping updates atomic.
+All JSON reads and writes should go through `LoadRegistry`, `EnsureRegistry`, and `SaveRegistry`. `SaveRegistry` writes to a temp file and moves it into place, keeping updates atomic.
 
 ## Generated files
 
@@ -66,13 +65,13 @@ Generated files are not hand-maintained. Change the source templates or generati
 
 ## Host creation and removal
 
-`new-host` validates Docker, ensures `jq`, parses the site type, computes a default database name when one is not supplied, scaffolds the project, appends to `web-hosts.json`, adds host redirection, rebuilds web config, and runs Laravel migrations for Laravel projects.
+`new-host` validates Docker, parses the site type, computes a default database name when one is not supplied, scaffolds the project, appends to `web-hosts.json`, adds host redirection, rebuilds web config, and runs Laravel migrations for Laravel projects.
 
 `remove-host` removes the database/user, project directory, host cert files, host redirection, and JSON entry. The interactive form can remove multiple selected hosts and then rebuilds config once.
 
 ## Database naming
 
-`make_db_name()` derives database names from hostnames:
+`MakeDBName()` derives database names from hostnames:
 
 - Known second-level domains include `co.uk`, `gov.uk`, `com.br`, and `co.jp`.
 - Short second-level labels are treated as public suffix-like segments.
@@ -87,7 +86,7 @@ Each host receives an isolated database and user with the same name.
 
 Linux appends `127.0.0.1 <host>` to `/etc/hosts` through `sudo tee` and removes matching lines with `sudo sed`.
 
-WSL is detected through `/proc/version`. WSL host mapping uses Windows PowerShell and the `Hosts` module. `_resolve_hosts_module_path()` searches common module paths and caches the resolved path in `${XDG_CACHE_HOME:-$HOME/.cache}/web-sh/wsl-hosts-module`. `_run_host_mapping_cmdlet_batch()` batches host additions/removals into one elevated PowerShell process, so `build_webconf` should call `redirect_add_batch` instead of elevating once per host.
+WSL is detected through `/proc/version`. WSL host mapping uses Windows PowerShell from WSL to update `C:\Windows\System32\drivers\etc\hosts` in one elevated process, so `rebuildWebConfiguration` should use batched host redirects instead of elevating once per host. The update handles a read-only Windows hosts file by temporarily clearing and then restoring the attribute.
 
 ## SSL
 

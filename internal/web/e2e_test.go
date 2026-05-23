@@ -39,8 +39,9 @@ func TestBinaryWorkflowE2EWithFakeTools(t *testing.T) {
 	writeExecutable(t, filepath.Join(binDir, "docker"), fakeDockerScript())
 	writeExecutable(t, filepath.Join(binDir, "sudo"), fakeSudoScript())
 	writeExecutable(t, filepath.Join(binDir, "openssl"), fakeOpenSSLScript())
+	writeExecutable(t, filepath.Join(binDir, "powershell.exe"), fakePowerShellScript())
+	writeExecutable(t, filepath.Join(binDir, "pwsh.exe"), fakePowerShellScript())
 	writeExecutable(t, filepath.Join(binDir, "composer"), fakeComposerScript())
-	writeExecutable(t, filepath.Join(binDir, "gum"), fakeGumScript())
 	writeExecutable(t, filepath.Join(binDir, "certutil"), fakeCertutilScript())
 	t.Setenv("SCRIPT_DIR", scriptDir)
 	t.Setenv("WEB_ROOT", webRoot)
@@ -48,6 +49,7 @@ func TestBinaryWorkflowE2EWithFakeTools(t *testing.T) {
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("E2E_LOG", logPath)
 	t.Setenv("FAKE_HOSTS", fakeHosts)
+	t.Setenv("WEB_WINDOWS_HOSTS_PATH", fakeHosts)
 	t.Setenv("HOME", home)
 	var out bytes.Buffer
 	var errb bytes.Buffer
@@ -67,20 +69,24 @@ func TestBinaryWorkflowE2EWithFakeTools(t *testing.T) {
 		{"build-webconf"},
 		{"rootssl"},
 		{"hostssl", "manual.test"},
-		{"import-rootca"},
-		{"new-host", "e2ewp.test", "-t", "wp"},
-		{"new-host", "e2elaravel.test", "-t", "laravel"},
-		{"remove-host", "e2ewp.test", "--yes"},
-		{"debug", "off"},
-		{"mysql"},
-		{"db-backup"},
-		{"db-restore"},
-		{"redis-cli"},
-		{"redis-flush"},
-		{"bash"},
-		{"fish"},
-		{"down"},
 	}
+	if wsl, _ := isWSL(); !wsl {
+		commands = append(commands, []string{"import-rootca"})
+	}
+	commands = append(commands,
+		[]string{"new-host", "e2ewp.test", "-t", "wp"},
+		[]string{"new-host", "e2elaravel.test", "-t", "laravel"},
+		[]string{"remove-host", "e2ewp.test", "--yes"},
+		[]string{"debug", "off"},
+		[]string{"mysql"},
+		[]string{"db-backup"},
+		[]string{"db-restore"},
+		[]string{"redis-cli"},
+		[]string{"redis-flush"},
+		[]string{"bash"},
+		[]string{"fish"},
+		[]string{"down"},
+	)
 	for _, command := range commands {
 		if err := app.Run(command); err != nil {
 			t.Fatalf("web %s failed: %v\nstdout:\n%s\nstderr:\n%s", strings.Join(command, " "), err, out.String(), errb.String())
@@ -194,6 +200,22 @@ done
 `
 }
 
+func fakePowerShellScript() string {
+	return `#!/usr/bin/env bash
+set -euo pipefail
+printf 'powershell %s\n' "$*" >>"$E2E_LOG"
+joined="$*"
+for host in $(printf '%s\n' "$joined" | grep -oE '127\.0\.0\.1 [A-Za-z0-9.-]+' | awk '{print $2}'); do
+  grep -qE "(^|[[:space:]])${host}([[:space:]]|$)" "$FAKE_HOSTS" || printf '127.0.0.1 %s\n' "$host" >>"$FAKE_HOSTS"
+done
+for host in $(printf '%s\n' "$joined" | grep -oE "'[^']+'" | tr -d "'" | grep -E '^[A-Za-z][A-Za-z0-9.-]+$'); do
+  tmp="${FAKE_HOSTS}.tmp"
+  grep -vE "(^|[[:space:]])${host}([[:space:]]|$)" "$FAKE_HOSTS" >"$tmp" || true
+  mv "$tmp" "$FAKE_HOSTS"
+done
+`
+}
+
 func fakeComposerScript() string {
 	return `#!/usr/bin/env bash
 set -euo pipefail
@@ -201,18 +223,6 @@ printf 'composer %s\n' "$*" >>"$E2E_LOG"
 path="${@: -1}"
 mkdir -p "$path"
 printf 'APP_URL=http://localhost\nDB_CONNECTION=sqlite\n# DB_HOST=127.0.0.1\n# DB_PORT=3306\n# DB_DATABASE=laravel\n# DB_USERNAME=root\n# DB_PASSWORD=\n' >"$path/.env"
-`
-}
-
-func fakeGumScript() string {
-	return `#!/usr/bin/env bash
-set -euo pipefail
-printf 'gum %s\n' "$*" >>"$E2E_LOG"
-case "${1:-}" in
-  confirm) exit 0 ;;
-  choose) shift; for arg in "$@"; do [[ "$arg" == --* ]] && continue; printf '%s\n' "$arg"; exit 0; done ;;
-  input) printf 'input.test\n' ;;
-esac
 `
 }
 

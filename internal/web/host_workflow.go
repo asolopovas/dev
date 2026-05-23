@@ -117,18 +117,14 @@ func (a *App) removeHostInteractive(ctx context.Context) error {
 	if len(registry.Hosts) == 0 {
 		return errors.New("no hosts configured")
 	}
-	if !commandExists("gum") || !interactiveInput(a.In) {
+	if !interactiveInput(a.In) {
 		return errors.New("run web remove-host <hostname> or web remove-host <hostname> --yes")
 	}
-	var names []string
-	for _, host := range registry.Hosts {
-		names = append(names, host.Name)
+	for i, host := range registry.Hosts {
+		fmt.Fprintf(a.Out, "%d) %s\n", i+1, host.Name)
 	}
-	out, err := a.Runner.Output(ctx, "gum", append([]string{"choose", "--no-limit", "--header=Select hosts to remove (space to toggle, enter to confirm)"}, names...)...)
-	if err != nil {
-		return err
-	}
-	selectedNames := strings.Fields(string(out))
+	selected := a.prompt("Hosts to remove", "")
+	selectedNames := strings.Fields(strings.ReplaceAll(selected, ",", " "))
 	if len(selectedNames) == 0 {
 		return errors.New("no hosts selected")
 	}

@@ -25,8 +25,7 @@ build-go: ## Build Go web CLI
 
 install-go: install ## Install Go web CLI to /usr/local/bin/web
 
-test: ## Run unit tests
-	@bats tests/unit/
+test: test-go ## Run unit tests
 
 test-go:
 	@go test ./...
@@ -37,5 +36,5 @@ test-integration: ## Run integration tests (requires running services)
 test-all: ## Run all tests (integration if services are up)
 	@bash tests.sh
 
-lint: ## Run shellcheck on web.sh
-	@shellcheck -x -e SC2086,SC2016,SC2034,SC2029,SC2120,SC2119,SC2318 -S warning web.sh
+lint: ## Check Go formatting
+	@test -z "$$(gofmt -l cmd internal)"

@@ -1,6 +1,6 @@
-# web.sh
+# web
 
-Docker-based PHP development environment for local WordPress and Laravel work. One Bash CLI manages Docker Compose services, local hostnames, optional SSL certificates, database provisioning, and project scaffolding.
+Docker-based PHP development environment for local WordPress and Laravel work. The Go CLI manages Docker Compose services, local hostnames, optional SSL certificates, database provisioning, and project scaffolding.
 
 **License:** MIT · **Runtime:** Go + Docker Compose · **Platforms:** Linux, WSL2
 
@@ -11,13 +11,13 @@ Docker-based PHP development environment for local WordPress and Laravel work. O
 - WordPress and Laravel host scaffolding with per-site databases
 - Local hostname redirection for Linux and WSL2
 - Optional local root CA and host certificates
-- Bats unit/integration tests and ShellCheck linting
+- Go unit tests and Bats integration tests
 
 ## Requirements
 
-Required: Go, Docker, Docker Compose, Bash, `curl`, `tar`, and `jq`.
+Required: Go, Docker, Docker Compose, Bash, `curl`, and `tar`.
 
-Recommended: [`gum`](https://github.com/charmbracelet/gum) for prompts/spinners/tables, Fish for completions, `bats-core` and `shellcheck` for contributing. `openssl` is needed only when HTTPS certificates are enabled or generated manually.
+Recommended: Fish for completions and `bats-core` for integration tests. `openssl` is needed only when HTTPS certificates are enabled or generated manually.
 
 Laravel scaffolding also expects `composer` on the host.
 
@@ -38,7 +38,7 @@ Open `http://example.test`.
 
 HTTPS is disabled by default. To enable generated local certificates, set `"https": true` in `web-hosts.json`, run `web build-webconf`, then run `web import-rootca` once and restart the browser.
 
-`make install` builds the Go CLI and installs it as `/usr/local/bin/web`, using `sudo -A` with askpass when elevated permissions are needed. Without installation, replace `web` with `go run ./cmd/web`. The default paths assume the checkout lives at `$HOME/www/dev` and projects live under `$HOME/www`.
+`make install` builds the Go CLI and installs it as `/usr/local/bin/web`. When elevated permissions are needed it prompts through terminal `sudo` first, which works in WSL terminals, then falls back to non-interactive sudo/askpass. Without installation, replace `web` with `go run ./cmd/web`. The default paths assume the checkout lives at `$HOME/www/dev` and projects live under `$HOME/www`.
 
 ## Common commands
 
@@ -78,7 +78,6 @@ See [docs/OPERATIONS.md](./docs/OPERATIONS.md) for full operating notes.
 | Path | Role |
 |---|---|
 | `cmd/web`, `internal/web` | Go CLI and orchestration logic |
-| `web.sh` | Legacy sourceable Bash CLI |
 | `docker-compose.yml` | Local service graph |
 | `franken_php/` | PHP/Caddy image, entrypoint, config, templates, cert output |
 | `mariadb/`, `redis/` | Service configuration |

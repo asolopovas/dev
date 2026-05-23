@@ -4,7 +4,7 @@ Use this to install, run, and maintain the local development stack.
 
 ## Install
 
-Install requires Go, Docker, Docker Compose, Bash, `curl`, `tar`, and `jq`. `openssl` is needed only for local certificate generation.
+Install requires Go, Docker, Docker Compose, Bash, `curl`, and `tar`. `openssl` is needed only for local certificate generation.
 
 ```sh
 mkdir -p "$HOME/www"
@@ -16,7 +16,7 @@ make install
 
 The default paths assume the checkout lives at `$HOME/www/dev` and projects live under `$HOME/www`. For another layout, export `SCRIPT_DIR` and `WEB_ROOT` before running `web`.
 
-`make install` builds the Go CLI and installs it as `/usr/local/bin/web`. If that path needs elevated permissions, the installer uses `sudo -A` with `SUDO_ASKPASS` or a detected askpass helper. It also installs shell completions under the current user's config directories, including configured host names for host commands, and updates an existing `$HOME/.local/bin/web` entry to point at `/usr/local/bin/web` so older installs do not shadow the Go binary.
+`make install` builds the Go CLI and installs it as `/usr/local/bin/web`. If that path needs elevated permissions, the installer prompts through terminal `sudo` first, which works in WSL terminals, then falls back to non-interactive sudo and `SUDO_ASKPASS` or a detected askpass helper. It also installs shell completions under the current user's config directories, including configured host names for host commands, and updates an existing `$HOME/.local/bin/web` entry to point at `/usr/local/bin/web` so older installs do not shadow the Go binary.
 
 If you skip installation, run commands as `go run ./cmd/web <command>` from the checkout directory with the same path assumptions or exported path variables.
 
@@ -38,7 +38,7 @@ Edit `.env` before starting services.
 | `XDEBUG_TRIGGER` | `XDEBUG` | Trigger value |
 | `XDEBUG_HOST` | `host.docker.internal` | Host address used by Xdebug |
 
-`web.sh` defaults to `SCRIPT_DIR=$HOME/www/dev` and `WEB_ROOT=$HOME/www` unless those environment variables are overridden.
+The CLI defaults to `SCRIPT_DIR=$HOME/www/dev` and `WEB_ROOT=$HOME/www` unless those environment variables are overridden.
 
 `web-hosts.json` contains the global HTTPS switch. Missing or false means HTTP mode:
 
@@ -207,7 +207,7 @@ web debug profile
 web debug
 ```
 
-With no mode, `web debug` prompts through `gum`. The command edits `XDEBUG_MODE` in `.env` and recreates `franken_php`.
+With no mode, `web debug` prompts in the terminal. The command edits `XDEBUG_MODE` in `.env` and recreates `franken_php`.
 
 IDE defaults:
 
@@ -238,7 +238,7 @@ web dir
 
 ## WSL notes
 
-Host redirection on WSL uses the Windows hosts file through PowerShell and the `Hosts` module. If the module is missing, the CLI offers to install it. `build-webconf` batches mappings into one elevated PowerShell run, so expect one UAC prompt for many hosts.
+Host redirection on WSL uses Windows PowerShell to update `C:\Windows\System32\drivers\etc\hosts`. `build-webconf` batches mappings into one elevated PowerShell run, so expect one UAC prompt for many hosts. If the Windows hosts file is read-only, the CLI clears the attribute for the update and restores it afterward.
 
 ## Troubleshooting
 
@@ -246,9 +246,7 @@ Host redirection on WSL uses the Windows hosts file through PowerShell and the `
 |---|---|
 | Port 80 or 443 is already in use | Stop host-level nginx/apache/Caddy, run `web up` to remove old project orphans, or change the compose port mappings |
 | `web` command not found | Run `make install` and ensure `/usr/local/bin` is on `PATH` |
-| `jq` missing | Install `jq`; on apt-based systems `web.sh` can attempt installation when needed |
-| `gum` missing | Install `gum` for the interactive UI, or use non-interactive command flags where available |
-| WSL hosts file did not update | Accept the UAC prompt and ensure the PowerShell `Hosts` module is installed |
+| WSL hosts file did not update | Accept the UAC prompt from Windows PowerShell |
 | Browser does not trust HTTPS | Run `web rootssl`, `web import-rootca`, then restart Chrome/Brave |
 | Xdebug does not connect | Confirm the IDE listens on 9003, `XDEBUG_HOST=host.docker.internal`, and `XDEBUG_IDEKEY=XDEBUG` |
 | Laravel scaffold fails before Docker commands | Install Composer on the host |

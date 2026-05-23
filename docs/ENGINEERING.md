@@ -13,73 +13,35 @@ make test-all
 
 | Command | Scope |
 |---|---|
-| `make lint` | ShellCheck on `web.sh` |
-| `make test` | Unit tests in `tests/unit/` |
-| `make test-integration` | Integration tests in `tests/integration/`; requires running services |
-| `make test-all` | Runs `tests.sh`; includes integration tests only when `franken_php` is up |
-| `bats tests/unit/main.bats` | One unit file |
-| `bats -f "main help" tests/unit/` | Filtered test run |
+| `make lint` | Go formatting check |
+| `make test` | Go unit and E2E-style tests |
+| `make test-integration` | Bats integration tests in `tests/integration/`; requires running services |
+| `make test-all` | Runs Go tests and integration tests only when `franken_php` is up |
+| `go test ./internal/web -run TestName` | Filtered Go test run |
 
-CI runs `make lint` and `make test` on pushes and pull requests to `main`.
-
-## ShellCheck policy
-
-The lint target intentionally disables these ShellCheck rules:
-
-```text
-SC2086, SC2016, SC2034, SC2029, SC2120, SC2119, SC2318
-```
-
-Match the project lint command when adding local checks or CI steps.
+CI should run `make lint` and `make test` on pushes and pull requests to `main`.
 
 ## Code style
 
-- Do not add comments to code. This applies to Bash, YAML, Dockerfile, Caddy config, INI, Fish, and test files.
+- Do not add comments to code. This applies to Go, Bash, YAML, Dockerfile, Caddy config, INI, Fish, and test files.
 - Prefer clear function and variable names over explanatory comments.
-- Keep `web.sh` as a sourceable script and executable CLI.
-- Keep command behavior explicit in `main()`.
-- Preserve non-interactive fallbacks for `gum` UI paths.
+- Keep command behavior explicit in Cobra command handlers.
+- Preserve non-interactive command paths for prompts and confirmations.
+- Run `gofmt` on changed Go files.
 
-## Bash patterns
+## Go patterns
 
 | Pattern | Use |
 |---|---|
-| `die()` | Fatal error and exit 1 |
-| `warn()` | Non-fatal warning |
-| `info()` / `log()` | User-visible progress |
-| `require_*()` | Precondition checks |
-| `spin "message" command args...` | Gum spinner with plain fallback |
-| `$DC` | All Docker Compose calls |
-| `hosts_json_*()` | All host-registry JSON access |
-
-`$DC` starts as `docker compose -f $SCRIPT_DIR/docker-compose.yml` and includes `templates.yml` when that generated file exists.
+| `App` | Runtime dependencies and configuration |
+| `Runner` | Stub external commands in tests |
+| `LoadRegistry` / `EnsureRegistry` / `SaveRegistry` | Host-registry JSON access |
+| `writeFileAtomic` | Atomic generated-file and registry writes |
+| `requireDockerThen` | Docker precondition wrapper |
 
 ## Test isolation
 
-Unit tests source `web.sh` through `tests/test_helper.bash`. The helper redirects path globals into a temp directory:
-
-- `SCRIPT_DIR`
-- `WEB_ROOT`
-- `BACKEND_DIR`
-- `BACKEND_CONFIG_DIR`
-- `BACKEND_SITES_DIR`
-- `HOSTS_JSON`
-- `CERTS_DIR`
-
-After sourcing `web.sh`, unit tests stub external or interactive functions:
-
-- `_has_gum`
-- `_HAS_GUM=0`
-- `select_option`
-- `spin`
-- `redirect_remove`
-- `redirect_add`
-- `redirect_add_batch`
-- `db_remove`
-- `db_exists`
-- `db_create`
-
-New unit tests must work inside this sandbox. Do not require Docker, `/etc/hosts`, the Windows hosts file, real certificates outside the temp tree, or network services unless the test is explicitly an integration test.
+Go unit tests must work inside temp directories and fake external commands through `Runner` or temporary executable stubs. They must not require Docker, `/etc/hosts`, the Windows hosts file, real certificates outside the temp tree, or network services unless the test is explicitly an integration test.
 
 ## Integration tests
 
@@ -98,22 +60,20 @@ Before editing behavior, locate the owning function and related tests:
 
 | Area | Primary code | Tests |
 |---|---|---|
-| Command dispatch | `main()` | `tests/unit/main.bats` |
-| CLI argument parsing | `parse_new_host_args()` | `tests/unit/parse_args.bats` |
-| Host registry | `hosts_json_*()` | `tests/unit/hosts_json.bats` |
-| Database naming | `make_db_name()`, `sanitize_db_identifier()` | `tests/unit/db_name.bats` |
-| Generated configs | `build_webconf()` | `tests/unit/config.bats` |
-| SSL helpers | `ssl_*()` | `tests/unit/config.bats` |
+| Command dispatch | `commands.go` | `internal/web/commands_test.go` |
+| Host registry | `registry.go` | `internal/web/registry_test.go` |
+| Database naming | `MakeDBName`, `SanitizeDBIdentifier` | `internal/web/hostname_test.go` |
+| Generated configs | `rebuildWebConfiguration` | `internal/web/site_config_test.go` |
+| Host lifecycle | `host_workflow.go` | `internal/web/host_workflow_test.go` |
+| Project scaffolding | `project_scaffold.go` | `internal/web/project_scaffold_test.go` |
 | Container/runtime behavior | Docker files, compose, entrypoint | `tests/integration/` |
 
 ## Known traps
 
-- Do not add `command -v gum` calls inside logging or spinner hot paths. `_HAS_GUM` is memoized at startup; reference it directly.
-- Do not perform one PowerShell elevation per host in `build_webconf`. Use `redirect_add_batch`.
-- Do not add per-service `docker compose ps` calls for status rendering. The fast path is one `$DC ps --format json` call and `jq` formatting.
+- Do not perform one PowerShell elevation per host in `rebuildWebConfiguration`. Use batched host redirects.
+- Do not add per-service Docker Compose status calls for status rendering. Prefer a single Compose `ps` call.
 - Do not rewrite PHP `.ini` files at runtime. PHP handles `${ENV_VAR}` interpolation from Compose-provided environment values.
 - Do not hand-edit generated Caddy site files, certs, `templates.yml`, or `crontab` as durable source changes.
-- Do not remove the `BASH_SOURCE` guard at the bottom of `web.sh`.
 
 ## Documentation updates
 

@@ -56,6 +56,7 @@ func TestRemoveHostByNameRejectsUnknownHost(t *testing.T) {
 
 func TestRemoveHostByNameRemovesUnconfiguredProject(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("WEB_WINDOWS_HOSTS_PATH", filepath.Join(dir, "windows-hosts"))
 	cfg := testHostWorkflowConfig(dir)
 	project := filepath.Join(cfg.WebRoot, "test.test")
 	cert := filepath.Join(cfg.CertsDir, "test.test.crt")

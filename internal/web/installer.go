@@ -40,6 +40,14 @@ func (a *App) installSystemBinary(source string, dest string) error {
 	if !commandExists("sudo") {
 		return fmt.Errorf("installing %s requires elevated permissions and sudo is not installed", dest)
 	}
+	if canPromptForSudo() {
+		sudoArgs := append([]string{"install"}, installArgs...)
+		return wrapCommandError("sudo", sudoArgs, a.Runner.Run(ctx, "sudo", sudoArgs...))
+	}
+	sudoArgs := append([]string{"-n", "install"}, installArgs...)
+	if err := a.Runner.Run(ctx, "sudo", sudoArgs...); err == nil {
+		return nil
+	}
 	if askpass := findAskpass(); askpass != "" {
 		sudoArgs := append([]string{"-A", "install"}, installArgs...)
 		if os.Getenv("SUDO_ASKPASS") != "" {
@@ -48,11 +56,7 @@ func (a *App) installSystemBinary(source string, dest string) error {
 		envArgs := append([]string{"SUDO_ASKPASS=" + askpass, "sudo"}, sudoArgs...)
 		return wrapCommandError("env", envArgs, a.Runner.Run(ctx, "env", envArgs...))
 	}
-	sudoArgs := append([]string{"-n", "install"}, installArgs...)
-	if err := a.Runner.Run(ctx, "sudo", sudoArgs...); err == nil {
-		return nil
-	}
-	return fmt.Errorf("installing %s requires elevated permissions and no askpass helper was found", dest)
+	return fmt.Errorf("installing %s requires elevated permissions; run sudo install -m 0755 %s %s or configure SUDO_ASKPASS", dest, source, dest)
 }
 
 func canInstallWithoutSudo(dest string) bool {
@@ -101,14 +105,20 @@ func ensureLocalWebUsesSystem(dest string) error {
 	return os.Symlink(dest, local)
 }
 
+func canPromptForSudo() bool {
+	tty, err := os.OpenFile("/dev/tty", os.O_RDONLY, 0)
+	if err != nil {
+		return false
+	}
+	_ = tty.Close()
+	return true
+}
+
 func findAskpass() string {
 	if askpass := os.Getenv("SUDO_ASKPASS"); askpass != "" {
 		return askpass
 	}
 	if askpass := os.Getenv("SSH_ASKPASS"); askpass != "" {
-		return askpass
-	}
-	if askpass := os.Getenv("GIT_ASKPASS"); askpass != "" {
 		return askpass
 	}
 	for _, candidate := range []string{"askpass", "ssh-askpass", "ksshaskpass", "lxqt-openssh-askpass", "gnome-ssh-askpass", "x11-ssh-askpass"} {
