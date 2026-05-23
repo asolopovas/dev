@@ -4,6 +4,8 @@ Use this to install, run, and maintain the local development stack.
 
 ## Install
 
+Install requires Go, Docker, Docker Compose, Bash, `curl`, `tar`, `openssl`, and `jq`.
+
 ```sh
 mkdir -p "$HOME/www"
 git clone https://github.com/asolopovas/dev.git "$HOME/www/dev"
@@ -12,14 +14,11 @@ cp .env.example .env
 make install
 ```
 
-The default paths assume the checkout lives at `$HOME/www/dev` and projects live under `$HOME/www`. For another layout, export `SCRIPT_DIR` and `WEB_ROOT` before running `web.sh`.
+The default paths assume the checkout lives at `$HOME/www/dev` and projects live under `$HOME/www`. For another layout, export `SCRIPT_DIR` and `WEB_ROOT` before running `web`.
 
-`make install` creates:
+`make install` builds the Go CLI and installs it as `/usr/local/bin/web`. If that path needs elevated permissions, the installer uses `sudo -A` with `SUDO_ASKPASS` or a detected askpass helper. It also installs shell completions under the current user's config directories and updates an existing `$HOME/.local/bin/web` entry to point at `/usr/local/bin/web` so older installs do not shadow the Go binary.
 
-- `$HOME/.local/bin/web` -> `web.sh`
-- `$HOME/.config/fish/completions/web.fish` -> `web.completions.fish`
-
-If you skip installation, run commands as `./web.sh <command>` from the checkout directory with the same path assumptions or exported path variables.
+If you skip installation, run commands as `go run ./cmd/web <command>` from the checkout directory with the same path assumptions or exported path variables.
 
 ## Configure
 
@@ -221,7 +220,7 @@ Host redirection on WSL uses the Windows hosts file through PowerShell and the `
 | Symptom | Fix |
 |---|---|
 | Port 80 or 443 is already in use | Stop host-level nginx/apache/Caddy, run `web up` to remove old project orphans, or change the compose port mappings |
-| `web` command not found | Run `make install`, ensure `$HOME/.local/bin` is on `PATH`, or use `./web.sh` |
+| `web` command not found | Run `make install` and ensure `/usr/local/bin` is on `PATH` |
 | `jq` missing | Install `jq`; on apt-based systems `web.sh` can attempt installation when needed |
 | `gum` missing | Install `gum` for the interactive UI, or use non-interactive command flags where available |
 | WSL hosts file did not update | Accept the UAC prompt and ensure the PowerShell `Hosts` module is installed |

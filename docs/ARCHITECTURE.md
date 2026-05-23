@@ -1,24 +1,25 @@
 # Architecture
 
-`web.sh` is a sourceable Bash CLI around Docker Compose. It keeps local PHP projects reproducible by deriving generated Caddy, SSL, cron, host-alias, and database state from a small host registry.
+`web` is a Go CLI around Docker Compose. It keeps local PHP projects reproducible by deriving generated Caddy, SSL, cron, host-alias, and database state from a small host registry. `web.sh` remains as a legacy sourceable Bash CLI.
 
 ## Top-level flow
 
 ```text
-web.sh command
-  -> main() dispatch
-  -> helper functions validate inputs and mutate config
+web command
+  -> Cobra command dispatch
+  -> App methods validate inputs and mutate config
   -> Docker Compose runs services
-  -> build_webconf regenerates runtime files from web-hosts.json
+  -> buildWebconf regenerates runtime files from web-hosts.json
 ```
 
-`web.sh` sets `errexit` and `pipefail`. Tests source the script directly, so the final `BASH_SOURCE` guard must remain intact and `main()` must only run when the script is executed.
+`make install` builds the Go CLI and installs it to `/usr/local/bin/web`. `web.sh` sets `errexit` and `pipefail`. Tests source the script directly, so the final `BASH_SOURCE` guard must remain intact and `main()` must only run when the script is executed.
 
 ## Important paths
 
 | Path | Purpose |
 |---|---|
-| `web.sh` | CLI, orchestration, host management, SSL, DB helpers |
+| `cmd/web`, `internal/web` | Go CLI, orchestration, host management, SSL, DB helpers |
+| `web.sh` | Legacy sourceable Bash CLI |
 | `docker-compose.yml` | Service definitions and local ports |
 | `.env` | Compose environment values |
 | `web-hosts.json` | Local host registry, gitignored |

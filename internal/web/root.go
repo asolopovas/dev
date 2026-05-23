@@ -255,7 +255,7 @@ func addToolCommands(root *cobra.Command, app *App) {
 	})
 	root.AddCommand(&cobra.Command{
 		Use:   "install",
-		Short: "Create CLI symlinks and completions",
+		Short: "Install CLI and completions",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := app.install(); err != nil {
@@ -322,8 +322,26 @@ func installCompletions(root *cobra.Command) error {
 	if err := os.MkdirAll(bashDir, 0755); err != nil {
 		return err
 	}
-	if err := root.GenFishCompletionFile(filepath.Join(fishDir, "web.fish"), true); err != nil {
+	fishFile := filepath.Join(fishDir, "web.fish")
+	bashFile := filepath.Join(bashDir, "web")
+	if err := removePathIfPresent(fishFile); err != nil {
 		return err
 	}
-	return root.GenBashCompletionFile(filepath.Join(bashDir, "web"))
+	if err := removePathIfPresent(bashFile); err != nil {
+		return err
+	}
+	if err := root.GenFishCompletionFile(fishFile, true); err != nil {
+		return err
+	}
+	return root.GenBashCompletionFile(bashFile)
+}
+
+func removePathIfPresent(path string) error {
+	if _, err := os.Lstat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	return os.Remove(path)
 }

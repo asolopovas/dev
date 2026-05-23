@@ -2,7 +2,7 @@
 
 Docker-based PHP development environment for local WordPress and Laravel work. One Bash CLI manages Docker Compose services, local hostnames, SSL certificates, database provisioning, and project scaffolding.
 
-**License:** MIT · **Runtime:** Bash + Docker Compose · **Platforms:** Linux, WSL2
+**License:** MIT · **Runtime:** Go + Docker Compose · **Platforms:** Linux, WSL2
 
 ## What it includes
 
@@ -15,7 +15,7 @@ Docker-based PHP development environment for local WordPress and Laravel work. O
 
 ## Requirements
 
-Required: Docker, Docker Compose, Bash, `curl`, `tar`, `openssl`, and `jq`.
+Required: Go, Docker, Docker Compose, Bash, `curl`, `tar`, `openssl`, and `jq`.
 
 Recommended: [`gum`](https://github.com/charmbracelet/gum) for prompts/spinners/tables, Fish for completions, `bats-core` and `shellcheck` for contributing.
 
@@ -43,7 +43,7 @@ web rootssl
 web import-rootca
 ```
 
-Without installation, replace `web` with `./web.sh`. The default paths assume the checkout lives at `$HOME/www/dev` and projects live under `$HOME/www`.
+`make install` builds the Go CLI and installs it as `/usr/local/bin/web`, using `sudo -A` with askpass when elevated permissions are needed. Without installation, replace `web` with `go run ./cmd/web`. The default paths assume the checkout lives at `$HOME/www/dev` and projects live under `$HOME/www`.
 
 ## Common commands
 
@@ -82,7 +82,8 @@ See [docs/OPERATIONS.md](./docs/OPERATIONS.md) for full operating notes.
 
 | Path | Role |
 |---|---|
-| `web.sh` | Main CLI and orchestration logic |
+| `cmd/web`, `internal/web` | Go CLI and orchestration logic |
+| `web.sh` | Legacy sourceable Bash CLI |
 | `docker-compose.yml` | Local service graph |
 | `franken_php/` | PHP/Caddy image, entrypoint, config, templates, cert output |
 | `mariadb/`, `redis/` | Service configuration |

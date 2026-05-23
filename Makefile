@@ -16,21 +16,14 @@ push: build ## Build and push image to registry
 pull: ## Pull image from registry
 	docker pull $(IMAGE):$(TAG)
 
-install: ## Symlink web CLI and fish completions
-	@mkdir -p $(HOME)/.local/bin $(HOME)/.config/fish/completions
-	ln -sf $(CURDIR)/web.sh $(HOME)/.local/bin/web
-	ln -sf $(CURDIR)/web.completions.fish $(HOME)/.config/fish/completions/web.fish
-	@printf "Installed: web -> %s/web.sh\n" $(CURDIR)
+install: build-go ## Install Go web CLI to /usr/local/bin/web
+	@$(CURDIR)/bin/web install
 
-build-go:
+build-go: ## Build Go web CLI
 	@mkdir -p bin
 	go build -o bin/web ./cmd/web
 
-install-go: build-go
-	@mkdir -p $(HOME)/.local/bin
-	ln -sf $(CURDIR)/bin/web $(HOME)/.local/bin/web
-	$(CURDIR)/bin/web completion install
-	@printf "Installed: web -> %s/bin/web\n" $(CURDIR)
+install-go: install ## Install Go web CLI to /usr/local/bin/web
 
 test: ## Run unit tests
 	@bats tests/unit/
