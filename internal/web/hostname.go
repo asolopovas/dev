@@ -58,10 +58,7 @@ func MakeDBName(host string, hostType string) string {
 		if tldCount == 1 && n >= 2 && len(parts[n-2]) <= 3 {
 			tldCount = 2
 		}
-		idx := n - 1 - tldCount
-		if idx < 0 {
-			idx = 0
-		}
+		idx := max(n-1-tldCount, 0)
 		mainDomain = parts[idx]
 		if idx > 0 {
 			subDomain = strings.Join(parts[:idx], ".")

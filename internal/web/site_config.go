@@ -22,11 +22,14 @@ func (a *App) rebuildWebConfiguration(ctx context.Context) error {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.Type().IsRegular() && name != "phpmyadmin.test.conf" && name != ".gitkeep" {
+		if entry.Type().IsRegular() && name != ".gitkeep" {
 			if err := os.Remove(filepath.Join(a.Config.BackendSitesDir, name)); err != nil {
 				return err
 			}
 		}
+	}
+	if err := a.writePhpMyAdminConfiguration(registry.HTTPS); err != nil {
+		return err
 	}
 	validHosts := make([]HostEntry, 0, len(registry.Hosts))
 	for _, host := range registry.Hosts {
@@ -43,9 +46,11 @@ func (a *App) rebuildWebConfiguration(ctx context.Context) error {
 	if err := a.addHostRedirects(ctx, allHosts); err != nil {
 		return err
 	}
-	if _, ok := registry.Host("phpmyadmin.test"); !ok {
-		if err := a.generateHostCertificate(ctx, "phpmyadmin.test"); err != nil {
-			return err
+	if registry.HTTPS {
+		if _, ok := registry.Host("phpmyadmin.test"); !ok {
+			if err := a.generateHostCertificate(ctx, "phpmyadmin.test"); err != nil {
+				return err
+			}
 		}
 	}
 	fmt.Fprintf(a.Out, "Rebuilding web configuration: %d hosts\n", len(validHosts))
@@ -56,7 +61,7 @@ func (a *App) rebuildWebConfiguration(ctx context.Context) error {
 		return err
 	}
 	for _, host := range validHosts {
-		if err := a.writeSiteConfiguration(ctx, host); err != nil {
+		if err := a.writeSiteConfiguration(ctx, host, registry.HTTPS); err != nil {
 			return err
 		}
 	}
@@ -79,7 +84,35 @@ func (a *App) writeComposeAliases(hosts []HostEntry) error {
 	return os.WriteFile(filepath.Join(a.Config.ScriptDir, "templates.yml"), []byte(b.String()), 0644)
 }
 
-func (a *App) writeSiteConfiguration(ctx context.Context, host HostEntry) error {
+func (a *App) writePhpMyAdminConfiguration(https bool) error {
+	return os.WriteFile(filepath.Join(a.Config.BackendSitesDir, "phpmyadmin.test.conf"), []byte(phpMyAdminConfiguration(https)), 0644)
+}
+
+func phpMyAdminConfiguration(https bool) string {
+	return "http://phpmyadmin.test {\n    root * /var/www/html\n    encode gzip\n\n    file_server\n\n    php_fastcgi phpmyadmin:9000\n}\n" + phpMyAdminHTTPSBlock(https)
+}
+
+func renderSiteConfiguration(templateContent string, hostName string, serveRoot string, https bool) string {
+	site := strings.ReplaceAll(templateContent, "${APP_URL}", hostName)
+	site = strings.ReplaceAll(site, "${SERVE_ROOT}", serveRoot)
+	return site + hostHTTPSBlock(hostName, serveRoot, https)
+}
+
+func phpMyAdminHTTPSBlock(https bool) string {
+	if https {
+		return "\nhttps://phpmyadmin.test {\n    tls /etc/caddy/ssl/phpmyadmin.test.crt /etc/caddy/ssl/phpmyadmin.test.key\n    root * /var/www/html\n    encode gzip\n\n    file_server\n\n    php_fastcgi phpmyadmin:9000\n}\n"
+	}
+	return "\nhttps://phpmyadmin.test {\n    tls internal\n    redir http://phpmyadmin.test{uri}\n}\n"
+}
+
+func hostHTTPSBlock(hostName string, serveRoot string, https bool) string {
+	if https {
+		return fmt.Sprintf("\nhttps://%s {\n    tls /etc/caddy/ssl/%s.crt /etc/caddy/ssl/%s.key\n    root * %s\n    import /etc/caddy/cors.conf\n\n    php_server\n}\n", hostName, hostName, hostName, serveRoot)
+	}
+	return fmt.Sprintf("\nhttps://%s {\n    tls internal\n    import /etc/caddy/cors.conf\n\n    redir http://%s{uri}\n}\n", hostName, hostName)
+}
+
+func (a *App) writeSiteConfiguration(ctx context.Context, host HostEntry, https bool) error {
 	serveRoot := "/var/www/" + host.Name
 	if host.Type == "wp" || host.Type == "wordpress" {
 		line := fmt.Sprintf("* * * * * cd %s && php %s/wp-cron.php >/proc/self/fd/1 2>/proc/self/fd/2\n", serveRoot, serveRoot)
@@ -95,8 +128,10 @@ func (a *App) writeSiteConfiguration(ctx context.Context, host HostEntry) error 
 			return err
 		}
 	}
-	if err := a.generateHostCertificate(ctx, host.Name); err != nil {
-		return err
+	if https {
+		if err := a.generateHostCertificate(ctx, host.Name); err != nil {
+			return err
+		}
 	}
 	if host.Type == "laravel" {
 		serveRoot += "/public"
@@ -117,8 +152,7 @@ func (a *App) writeSiteConfiguration(ctx context.Context, host HostEntry) error 
 	if err != nil {
 		return err
 	}
-	site := strings.ReplaceAll(string(templateContent), "${APP_URL}", host.Name)
-	site = strings.ReplaceAll(site, "${SERVE_ROOT}", serveRoot)
+	site := renderSiteConfiguration(string(templateContent), host.Name, serveRoot, https)
 	if err := os.WriteFile(filepath.Join(a.Config.BackendSitesDir, host.Name+".conf"), []byte(site), 0644); err != nil {
 		return err
 	}

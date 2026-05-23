@@ -4,7 +4,7 @@ Use this to install, run, and maintain the local development stack.
 
 ## Install
 
-Install requires Go, Docker, Docker Compose, Bash, `curl`, `tar`, `openssl`, and `jq`.
+Install requires Go, Docker, Docker Compose, Bash, `curl`, `tar`, and `jq`. `openssl` is needed only for local certificate generation.
 
 ```sh
 mkdir -p "$HOME/www"
@@ -39,6 +39,17 @@ Edit `.env` before starting services.
 | `XDEBUG_HOST` | `host.docker.internal` | Host address used by Xdebug |
 
 `web.sh` defaults to `SCRIPT_DIR=$HOME/www/dev` and `WEB_ROOT=$HOME/www` unless those environment variables are overridden.
+
+`web-hosts.json` contains the global HTTPS switch. Missing or false means HTTP mode:
+
+```json
+{
+  "https": false,
+  "hosts": []
+}
+```
+
+Set `"https": true` only when you want generated local certificates and HTTPS site blocks.
 
 ## First run
 
@@ -111,7 +122,7 @@ Regenerate all generated runtime files:
 web build-webconf
 ```
 
-`build-webconf` reads `web-hosts.json`, adds local host mappings, creates missing certificates, writes Caddy site files, writes Docker network aliases to `templates.yml`, writes WordPress cron lines to `crontab`, creates per-site VS Code launch configs, creates missing databases, and restarts `franken_php`.
+`build-webconf` reads `web-hosts.json`, adds local host mappings, creates missing certificates only when `"https": true`, writes Caddy site files, writes Docker network aliases to `templates.yml`, writes WordPress cron lines to `crontab`, creates per-site VS Code launch configs, creates missing databases, and restarts `franken_php`.
 
 ## Scaffolding behavior
 
@@ -121,13 +132,29 @@ Laravel scaffolding runs `composer create-project --quiet --prefer-dist laravel/
 
 ## SSL
 
-Generate the local root CA:
+HTTPS is off by default. In HTTP mode, generated Caddy config redirects `https://<host>` back to `http://<host>` and does not create project certificate files.
+
+Enable generated certificates globally:
+
+```json
+{
+  "https": true
+}
+```
+
+Then regenerate config:
+
+```sh
+web build-webconf
+```
+
+Generate the local root CA manually:
 
 ```sh
 web rootssl
 ```
 
-Generate a certificate for one host:
+Generate a certificate for one host manually:
 
 ```sh
 web hostssl example.test
@@ -140,8 +167,6 @@ web import-rootca
 ```
 
 WSL users should trust certificates through Windows/browser tooling. `import-rootca` is Linux-only and exits on WSL.
-
-HTTP works without trusted certificates. Use HTTPS after the root CA has been imported and the browser restarted.
 
 ## Database
 

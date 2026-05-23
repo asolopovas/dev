@@ -30,7 +30,10 @@ func (a *App) scaffoldWordPress(ctx context.Context, host string, dbName string)
 	} else if err != nil {
 		return err
 	}
-	tmp, err := os.MkdirTemp("", "web-wordpress-*")
+	if err := os.MkdirAll(a.Config.WebRoot, 0755); err != nil {
+		return err
+	}
+	tmp, err := os.MkdirTemp(a.Config.WebRoot, ".web-wordpress-*")
 	if err != nil {
 		return err
 	}
@@ -70,7 +73,7 @@ func (a *App) scaffoldWordPress(ctx context.Context, host string, dbName string)
 	return os.WriteFile(conf, []byte(content), 0644)
 }
 
-func (a *App) scaffoldLaravel(ctx context.Context, host string, dbName string) error {
+func (a *App) scaffoldLaravel(ctx context.Context, host string, dbName string, scheme string) error {
 	path := filepath.Join(a.Config.WebRoot, host)
 	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("Laravel project %s already exists", path)
@@ -90,7 +93,7 @@ func (a *App) scaffoldLaravel(ctx context.Context, host string, dbName string) e
 	for i, line := range lines {
 		switch {
 		case strings.HasPrefix(line, "APP_URL="):
-			lines[i] = "APP_URL=https://" + host
+			lines[i] = "APP_URL=" + scheme + "://" + host
 		case strings.HasPrefix(line, "DB_CONNECTION="):
 			lines[i] = "DB_CONNECTION=mysql"
 		case strings.HasPrefix(line, "# DB_HOST="):

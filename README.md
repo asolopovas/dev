@@ -1,6 +1,6 @@
 # web.sh
 
-Docker-based PHP development environment for local WordPress and Laravel work. One Bash CLI manages Docker Compose services, local hostnames, SSL certificates, database provisioning, and project scaffolding.
+Docker-based PHP development environment for local WordPress and Laravel work. One Bash CLI manages Docker Compose services, local hostnames, optional SSL certificates, database provisioning, and project scaffolding.
 
 **License:** MIT · **Runtime:** Go + Docker Compose · **Platforms:** Linux, WSL2
 
@@ -15,9 +15,9 @@ Docker-based PHP development environment for local WordPress and Laravel work. O
 
 ## Requirements
 
-Required: Go, Docker, Docker Compose, Bash, `curl`, `tar`, `openssl`, and `jq`.
+Required: Go, Docker, Docker Compose, Bash, `curl`, `tar`, and `jq`.
 
-Recommended: [`gum`](https://github.com/charmbracelet/gum) for prompts/spinners/tables, Fish for completions, `bats-core` and `shellcheck` for contributing.
+Recommended: [`gum`](https://github.com/charmbracelet/gum) for prompts/spinners/tables, Fish for completions, `bats-core` and `shellcheck` for contributing. `openssl` is needed only when HTTPS certificates are enabled or generated manually.
 
 Laravel scaffolding also expects `composer` on the host.
 
@@ -36,12 +36,7 @@ web new-host example.test -t wp
 
 Open `http://example.test`.
 
-For trusted HTTPS, run this once, then restart the browser:
-
-```sh
-web rootssl
-web import-rootca
-```
+HTTPS is disabled by default. To enable generated local certificates, set `"https": true` in `web-hosts.json`, run `web build-webconf`, then run `web import-rootca` once and restart the browser.
 
 `make install` builds the Go CLI and installs it as `/usr/local/bin/web`, using `sudo -A` with askpass when elevated permissions are needed. Without installation, replace `web` with `go run ./cmd/web`. The default paths assume the checkout lives at `$HOME/www/dev` and projects live under `$HOME/www`.
 
@@ -58,7 +53,7 @@ web import-rootca
 | `web log <service>` | Follow service logs |
 | `web new-host [host] [-t wp\|laravel]` | Create a WordPress or Laravel site |
 | `web remove-host [host]` | Remove a site, database, certs, and host mapping |
-| `web build-webconf` | Regenerate generated Caddy, SSL, cron, and alias files |
+| `web build-webconf` | Regenerate generated Caddy, optional SSL, cron, and alias files |
 | `web bash` / `web fish` | Open a shell in `franken_php` |
 | `web mysql` | Open MariaDB as root |
 | `web db-backup` / `web db-restore` | Dump or restore all databases |
@@ -71,7 +66,7 @@ See [docs/OPERATIONS.md](./docs/OPERATIONS.md) for full operating notes.
 
 | Service | Endpoint |
 |---|---|
-| FrankenPHP / Caddy | `http://<host>`, `https://<host>`, ports 80/443/8080 |
+| FrankenPHP / Caddy | `http://<host>`, optional `https://<host>`, ports 80/443/8080 |
 | MariaDB | `127.0.0.1:3306` |
 | Redis | `127.0.0.1:6379` |
 | PhpMyAdmin | `http://phpmyadmin.test` |

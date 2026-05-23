@@ -44,7 +44,7 @@ web command
 
 ## Host registry
 
-`web-hosts.json` is the source of truth for managed sites. It contains output paths, the Caddy template path, `WEB_ROOT`, and host entries with `name`, `type`, and `db`.
+`web-hosts.json` is the source of truth for managed sites. It contains output paths, the Caddy template path, `WEB_ROOT`, the global `https` switch, and host entries with `name`, `type`, and `db`.
 
 `build_webconf` initializes this file with defaults when it is missing. `new-host` writes through the JSON helpers and expects the registry to exist, so a fresh checkout should run `web build-webconf` once after services are started.
 
@@ -57,7 +57,7 @@ All JSON reads and writes should go through `hosts_json_*()` helpers. `hosts_jso
 | Output | Source |
 |---|---|
 | `franken_php/config/sites/*.conf` | `franken_php/config/template.conf` plus each host entry |
-| `franken_php/config/ssl/*.key`, `*.crt`, `*.csr` | local root CA and host certificate helpers |
+| `franken_php/config/ssl/*.key`, `*.crt`, `*.csr` | local root CA and host certificate helpers when `https` is true |
 | `templates.yml` | Docker Compose network aliases for managed hosts |
 | `crontab` | WordPress cron entries for Supercronic |
 | `<WEB_ROOT>/<host>/.vscode/launch.json` | `launch.json` template |
@@ -91,7 +91,7 @@ WSL is detected through `/proc/version`. WSL host mapping uses Windows PowerShel
 
 ## SSL
 
-`rootssl` creates a local root CA under `franken_php/config/ssl/`. `hostssl <host>` creates a host key, CSR, and certificate signed by that root. `build_webconf` generates missing host certificates automatically.
+`rootssl` creates a local root CA under `franken_php/config/ssl/`. `hostssl <host>` creates a host key, CSR, and certificate signed by that root. `build_webconf` generates missing host certificates only when the global `https` setting in `web-hosts.json` is true. When `https` is false or missing, generated Caddy configs redirect HTTPS requests back to HTTP without project certificate files.
 
 `import-rootca` imports the root CA into the Linux NSS database used by Chrome/Brave. It is not supported on WSL.
 

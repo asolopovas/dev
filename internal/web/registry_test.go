@@ -3,6 +3,7 @@ package web
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -43,6 +44,16 @@ func TestEnsureRegistryCreatesDefaults(t *testing.T) {
 	}
 	if registry.WebRoot != cfg.WebRoot {
 		t.Fatalf("WebRoot = %q", registry.WebRoot)
+	}
+	if registry.HTTPS {
+		t.Fatal("default registry should disable HTTPS")
+	}
+	data, err := os.ReadFile(cfg.HostsJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "\"https\": false") {
+		t.Fatalf("default registry missing https false\n%s", data)
 	}
 	if _, err := os.Stat(cfg.HostsJSON); err != nil {
 		t.Fatal(err)

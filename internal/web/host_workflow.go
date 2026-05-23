@@ -48,7 +48,11 @@ func (a *App) newHost(ctx context.Context, host string, hostType string, dbName 
 			return err
 		}
 	case "laravel":
-		if err := a.scaffoldLaravel(ctx, host, dbName); err != nil {
+		scheme := "http"
+		if registry.HTTPS {
+			scheme = "https"
+		}
+		if err := a.scaffoldLaravel(ctx, host, dbName, scheme); err != nil {
 			return err
 		}
 	}
@@ -70,7 +74,11 @@ func (a *App) newHost(ctx context.Context, host string, hostType string, dbName 
 			return err
 		}
 	}
-	fmt.Fprintf(a.Out, "Ready: https://%s\n", host)
+	scheme := "http"
+	if registry.HTTPS {
+		scheme = "https"
+	}
+	fmt.Fprintf(a.Out, "Ready: %s://%s\n", scheme, host)
 	return nil
 }
 

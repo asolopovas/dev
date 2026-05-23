@@ -10,6 +10,7 @@ type Registry struct {
 	Output   string      `json:"output"`
 	Template string      `json:"template"`
 	WebRoot  string      `json:"WEB_ROOT"`
+	HTTPS    bool        `json:"https"`
 	Hosts    []HostEntry `json:"hosts"`
 }
 

@@ -2,6 +2,7 @@
     "output": "~/www/dev/franken_php/config/sites/",
     "template": "~/www/dev/franken_php/config/template.conf",
     "WEB_ROOT": "/var/www",
+    "https": false,
     "hosts": [
         {
             "name": "example.test",
