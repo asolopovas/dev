@@ -6,6 +6,14 @@ import (
 	"testing"
 )
 
+func TestComposePsTableFormatOmitsCommandAndCreatedColumns(t *testing.T) {
+	for _, column := range []string{"{{.Command}}", "{{.RunningFor}}"} {
+		if bytes.Contains([]byte(composePsTableFormat), []byte(column)) {
+			t.Fatalf("ps format includes %s", column)
+		}
+	}
+}
+
 func TestRunDockerComposeActionUsesPsFormatWithoutCommandColumn(t *testing.T) {
 	dir := t.TempDir()
 	cfg := dockerPsTestConfig(dir)

@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-const composePsTableFormat = "table {{.Name}}\t{{.Image}}\t{{.Service}}\t{{.RunningFor}}\t{{.Status}}\t{{.Ports}}"
+const composePsTableFormat = "table {{.Name}}\t{{.Image}}\t{{.Service}}\t{{.Status}}\t{{.Ports}}"
 
 func (a *App) composeArgs(args ...string) []string {
 	out := []string{dockerComposeSubcommand}
