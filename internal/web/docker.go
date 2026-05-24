@@ -6,6 +6,8 @@ import (
 	"fmt"
 )
 
+const composePsTableFormat = "table {{.Name}}\t{{.Image}}\t{{.Service}}\t{{.RunningFor}}\t{{.Status}}\t{{.Ports}}"
+
 func (a *App) composeArgs(args ...string) []string {
 	out := []string{dockerComposeSubcommand}
 	for _, file := range a.Config.ComposeFiles {
@@ -68,7 +70,7 @@ func (a *App) runDockerComposeAction(ctx context.Context, action string, service
 		return err
 	}
 	fmt.Fprintln(a.Out)
-	return a.dockerCompose(ctx, append([]string{"ps"}, services...)...)
+	return a.dockerCompose(ctx, append([]string{"ps", "--format", composePsTableFormat}, services...)...)
 }
 
 func (a *App) buildDockerComposeServices(ctx context.Context, args []string) error {
