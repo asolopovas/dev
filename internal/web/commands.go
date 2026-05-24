@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -98,7 +99,7 @@ func addEnvironmentCommands(root *cobra.Command, app *App) {
 	root.AddCommand(build)
 	root.AddCommand(appCommand("ps [service]", "Container status", cobra.ArbitraryArgs, func(ctx context.Context, args []string) error {
 		return app.requireDockerThen(ctx, func() error {
-			return app.dockerCompose(ctx, append([]string{"ps"}, args...)...)
+			return app.dockerComposePs(ctx, args...)
 		})
 	}))
 	root.AddCommand(appCommand("log [service]", "View service logs", cobra.ArbitraryArgs, func(ctx context.Context, args []string) error {
@@ -253,7 +254,7 @@ func newCompletionCommand() *cobra.Command {
 			case "bash":
 				return cmd.Root().GenBashCompletion(cmd.OutOrStdout())
 			case "fish":
-				return cmd.Root().GenFishCompletion(cmd.OutOrStdout(), true)
+				return writeFishCompletion(cmd.Root(), cmd.OutOrStdout())
 			}
 			return nil
 		},
@@ -290,10 +291,38 @@ func installCompletions(root *cobra.Command) error {
 	if err := removePathIfPresent(bashFile); err != nil {
 		return err
 	}
-	if err := root.GenFishCompletionFile(fishFile, true); err != nil {
+	if err := writeFishCompletionFile(root, fishFile); err != nil {
 		return err
 	}
 	return root.GenBashCompletionFile(bashFile)
+}
+
+func writeFishCompletionFile(root *cobra.Command, path string) error {
+	var out bytes.Buffer
+	if err := writeFishCompletion(root, &out); err != nil {
+		return err
+	}
+	return writeFileAtomic(path, out.Bytes(), 0644)
+}
+
+func writeFishCompletion(root *cobra.Command, output io.Writer) error {
+	var out bytes.Buffer
+	if err := root.GenFishCompletion(&out, true); err != nil {
+		return err
+	}
+	_, err := output.Write(fishCompletionWithoutComments(out.String()))
+	return err
+}
+
+func fishCompletionWithoutComments(content string) []byte {
+	var out strings.Builder
+	for _, line := range strings.SplitAfter(content, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		out.WriteString(line)
+	}
+	return []byte(strings.TrimLeft(out.String(), "\n"))
 }
 
 func removePathIfPresent(path string) error {

@@ -35,6 +35,10 @@ func (a *App) dockerComposeOutput(ctx context.Context, args ...string) ([]byte, 
 	return out, wrapCommandError(docker, all, err)
 }
 
+func (a *App) dockerComposePs(ctx context.Context, args ...string) error {
+	return a.dockerCompose(ctx, append([]string{"ps", "--format", composePsTableFormat}, args...)...)
+}
+
 func (a *App) requireDocker(ctx context.Context) error {
 	docker := a.Config.ResolvedValues().Tools.Docker
 	if !commandExists(docker) {
@@ -70,7 +74,7 @@ func (a *App) runDockerComposeAction(ctx context.Context, action string, service
 		return err
 	}
 	fmt.Fprintln(a.Out)
-	return a.dockerCompose(ctx, append([]string{"ps", "--format", composePsTableFormat}, services...)...)
+	return a.dockerComposePs(ctx, services...)
 }
 
 func (a *App) buildDockerComposeServices(ctx context.Context, args []string) error {

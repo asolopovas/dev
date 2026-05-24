@@ -26,6 +26,9 @@ func TestCobraHelpAndCompletions(t *testing.T) {
 	if !strings.Contains(out.String(), "complete -c web") {
 		t.Fatalf("fish completion was not generated")
 	}
+	if strings.Contains(out.String(), "#") {
+		t.Fatalf("fish completion contains comments")
+	}
 	out.Reset()
 	if err := Execute([]string{"completion", "bash"}, &out, &errb, strings.NewReader("")); err != nil {
 		t.Fatal(err)
@@ -83,6 +86,9 @@ func TestCompletionInstallWritesBashAndFish(t *testing.T) {
 		}
 		if !bytes.Contains(data, []byte("web")) {
 			t.Fatalf("completion %s does not contain web", path)
+		}
+		if filepath.Base(path) == "web.fish" && bytes.Contains(data, []byte("#")) {
+			t.Fatalf("fish completion contains comments")
 		}
 	}
 }
