@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -23,6 +24,24 @@ func TestComposePsOutputOmitsIPv6Ports(t *testing.T) {
 	}
 	if !bytes.Contains([]byte(got), []byte("0.0.0.0:80->80/tcp, 9000/tcp")) {
 		t.Fatalf("ps output removed unexpected ports: %s", got)
+	}
+}
+
+func TestComposePsOutputWrapsPortsUnderPortsColumn(t *testing.T) {
+	input := []byte("NAME                IMAGE   SERVICE       STATUS        PORTS\n" +
+		"dev-franken_php-1   image   franken_php   Up 1 minute   0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp, 9000/tcp\n")
+	got := string(formatComposePsOutput(input))
+	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+	wantPorts := []string{"0.0.0.0:80->80/tcp", "0.0.0.0:443->443/tcp", "9000/tcp"}
+	portColumn := strings.Index(lines[0], "PORTS")
+	if len(lines) != len(wantPorts)+1 {
+		t.Fatalf("unexpected wrapped output: %q", got)
+	}
+	for i, want := range wantPorts {
+		line := lines[i+1]
+		if strings.Index(line, want) != portColumn {
+			t.Fatalf("port line is not aligned under PORTS: %q", line)
+		}
 	}
 }
 

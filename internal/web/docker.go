@@ -44,8 +44,34 @@ func (a *App) dockerComposePs(ctx context.Context, args ...string) error {
 	if a.Out == nil {
 		return nil
 	}
-	_, err = a.Out.Write(composePsWithoutIPv6Ports(out))
+	_, err = a.Out.Write(formatComposePsOutput(out))
 	return err
+}
+
+func formatComposePsOutput(output []byte) []byte {
+	lines := strings.SplitAfter(string(output), "\n")
+	portColumn := -1
+	var out strings.Builder
+	for _, line := range lines {
+		body := strings.TrimSuffix(line, "\n")
+		eol := ""
+		if len(body) != len(line) {
+			eol = "\n"
+		}
+		if portColumn < 0 {
+			if idx := strings.Index(body, "PORTS"); idx >= 0 {
+				portColumn = idx
+			}
+			out.WriteString(line)
+			continue
+		}
+		if portColumn < len(body) {
+			body = body[:portColumn] + formatPortsColumn(body[portColumn:], portColumn)
+		}
+		out.WriteString(body)
+		out.WriteString(eol)
+	}
+	return []byte(out.String())
 }
 
 func composePsWithoutIPv6Ports(output []byte) []byte {
@@ -75,15 +101,31 @@ func composePsWithoutIPv6Ports(output []byte) []byte {
 }
 
 func withoutIPv6PortEntries(ports string) string {
+	return strings.Join(filteredPortEntries(ports), ", ")
+}
+
+func formatPortsColumn(ports string, portColumn int) string {
+	entries := filteredPortEntries(ports)
+	if len(entries) == 0 {
+		return ""
+	}
+	if len(entries) == 1 {
+		return entries[0]
+	}
+	return strings.Join(entries, "\n"+strings.Repeat(" ", portColumn))
+}
+
+func filteredPortEntries(ports string) []string {
 	parts := strings.Split(ports, ", ")
 	kept := make([]string, 0, len(parts))
 	for _, part := range parts {
-		if strings.HasPrefix(strings.TrimSpace(part), "[") {
+		part = strings.TrimSpace(part)
+		if part == "" || strings.HasPrefix(part, "[") {
 			continue
 		}
 		kept = append(kept, part)
 	}
-	return strings.Join(kept, ", ")
+	return kept
 }
 
 func (a *App) requireDocker(ctx context.Context) error {
