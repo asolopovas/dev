@@ -1,7 +1,7 @@
 IMAGE   ?= asolopovas/franken-php
 TAG     ?= latest
 
-.PHONY: help build push pull install install-go test test-go test-integration test-all lint build-go
+.PHONY: help build push pull install install-go test test-go test-integration test-all lint
 
 help:
 	@printf "\033[1mUsage:\033[0m make \033[36m<target>\033[0m\n\n"
@@ -16,14 +16,12 @@ push: build ## Build and push image to registry
 pull: ## Pull image from registry
 	docker pull $(IMAGE):$(TAG)
 
-install: build-go ## Install Go web CLI to /usr/local/bin/web
-	@$(CURDIR)/bin/web install
+install: install-go ## Install Go web CLI to /usr/local/bin/web
 
-build-go: ## Build Go web CLI
+install-go: ## Build and install Go web CLI to /usr/local/bin/web
 	@mkdir -p bin
 	go build -o bin/web ./cmd/web
-
-install-go: install ## Install Go web CLI to /usr/local/bin/web
+	@$(CURDIR)/bin/web install
 
 test: test-go ## Run unit tests
 
@@ -37,4 +35,4 @@ test-all: ## Run all tests (integration if services are up)
 	@bash tests.sh
 
 lint: ## Check Go formatting
-	@test -z "$$(gofmt -l cmd internal)"
+	@[ -z "$$(gofmt -l cmd internal)" ]

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 const composePsTableFormat = "table {{.Name}}\t{{.Image}}\t{{.Service}}\t{{.Status}}\t{{.Ports}}"
@@ -36,7 +37,53 @@ func (a *App) dockerComposeOutput(ctx context.Context, args ...string) ([]byte, 
 }
 
 func (a *App) dockerComposePs(ctx context.Context, args ...string) error {
-	return a.dockerCompose(ctx, append([]string{"ps", "--format", composePsTableFormat}, args...)...)
+	out, err := a.dockerComposeOutput(ctx, append([]string{"ps", "--format", composePsTableFormat}, args...)...)
+	if err != nil {
+		return err
+	}
+	if a.Out == nil {
+		return nil
+	}
+	_, err = a.Out.Write(composePsWithoutIPv6Ports(out))
+	return err
+}
+
+func composePsWithoutIPv6Ports(output []byte) []byte {
+	lines := strings.SplitAfter(string(output), "\n")
+	portColumn := -1
+	var out strings.Builder
+	for _, line := range lines {
+		body := strings.TrimSuffix(line, "\n")
+		eol := ""
+		if len(body) != len(line) {
+			eol = "\n"
+		}
+		if portColumn < 0 {
+			if idx := strings.Index(body, "PORTS"); idx >= 0 {
+				portColumn = idx
+			}
+			out.WriteString(line)
+			continue
+		}
+		if portColumn < len(body) {
+			body = body[:portColumn] + withoutIPv6PortEntries(body[portColumn:])
+		}
+		out.WriteString(body)
+		out.WriteString(eol)
+	}
+	return []byte(out.String())
+}
+
+func withoutIPv6PortEntries(ports string) string {
+	parts := strings.Split(ports, ", ")
+	kept := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if strings.HasPrefix(strings.TrimSpace(part), "[") {
+			continue
+		}
+		kept = append(kept, part)
+	}
+	return strings.Join(kept, ", ")
 }
 
 func (a *App) requireDocker(ctx context.Context) error {

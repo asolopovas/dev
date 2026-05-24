@@ -14,6 +14,18 @@ func TestComposePsTableFormatOmitsCommandAndCreatedColumns(t *testing.T) {
 	}
 }
 
+func TestComposePsOutputOmitsIPv6Ports(t *testing.T) {
+	input := []byte("NAME                IMAGE   SERVICE       STATUS        PORTS\n" +
+		"dev-franken_php-1   image   franken_php   Up 1 minute   0.0.0.0:80->80/tcp, [::]:80->80/tcp, 9000/tcp\n")
+	got := string(composePsWithoutIPv6Ports(input))
+	if bytes.Contains([]byte(got), []byte("[::]")) {
+		t.Fatalf("ps output contains ipv6 port: %s", got)
+	}
+	if !bytes.Contains([]byte(got), []byte("0.0.0.0:80->80/tcp, 9000/tcp")) {
+		t.Fatalf("ps output removed unexpected ports: %s", got)
+	}
+}
+
 func TestRunDockerComposeActionUsesPsFormatWithoutCommandColumn(t *testing.T) {
 	dir := t.TempDir()
 	cfg := dockerPsTestConfig(dir)
@@ -22,12 +34,12 @@ func TestRunDockerComposeActionUsesPsFormatWithoutCommandColumn(t *testing.T) {
 	if err := app.runDockerComposeAction(context.Background(), "up", []string{"redis"}); err != nil {
 		t.Fatal(err)
 	}
-	if len(runner.runs) != 2 {
+	if len(runner.runs) != 1 {
 		t.Fatalf("unexpected runs: %#v", runner.runs)
 	}
 	want := dockerPsCommand(cfg, "redis")
-	if runner.runs[1] != want {
-		t.Fatalf("unexpected ps command:\nwant: %q\n got: %q", want, runner.runs[1])
+	if len(runner.outputs) != 2 || runner.outputs[1] != want {
+		t.Fatalf("unexpected ps command:\nwant: %q\n got: %#v", want, runner.outputs)
 	}
 }
 
@@ -39,12 +51,12 @@ func TestPsCommandUsesPsFormatWithoutCommandColumn(t *testing.T) {
 	if err := app.Run([]string{"ps", "redis"}); err != nil {
 		t.Fatal(err)
 	}
-	if len(runner.runs) != 1 {
+	if len(runner.runs) != 0 {
 		t.Fatalf("unexpected runs: %#v", runner.runs)
 	}
 	want := dockerPsCommand(cfg, "redis")
-	if runner.runs[0] != want {
-		t.Fatalf("unexpected ps command:\nwant: %q\n got: %q", want, runner.runs[0])
+	if len(runner.outputs) != 2 || runner.outputs[1] != want {
+		t.Fatalf("unexpected ps command:\nwant: %q\n got: %#v", want, runner.outputs)
 	}
 }
 
