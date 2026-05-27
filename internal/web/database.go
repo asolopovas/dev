@@ -41,7 +41,7 @@ func (a *App) databaseExists(ctx context.Context, db string) (bool, error) {
 }
 
 func validateDatabaseIdentifier(name string) error {
-	if name == "" || SanitizeDBIdentifier(name) != name {
+	if name == "" || dbIdentRe.MatchString(name) {
 		return fmt.Errorf("invalid database identifier %q", name)
 	}
 	return nil

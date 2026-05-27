@@ -90,7 +90,7 @@ WSL is detected through `/proc/version`. WSL host mapping uses Windows PowerShel
 
 ## SSL
 
-`rootssl` creates a local root CA under `franken_php/config/ssl/`. `hostssl <host>` creates a host key, CSR, and certificate signed by that root. `build_webconf` generates missing host certificates only when the global `https` setting in `web-hosts.json` is true. When `https` is false or missing, generated Caddy configs redirect HTTPS requests back to HTTP without project certificate files.
+`rootssl` creates a local root CA under `franken_php/config/ssl/`. `hostssl <host>` creates a host key, CSR, and certificate signed by that root. `build_webconf` generates missing host certificates for redirect-only HTTPS blocks and full HTTPS site blocks. When `https` is false or missing, generated Caddy configs use those certificates only to redirect HTTPS requests back to HTTP.
 
 `import-rootca` imports the root CA into the Linux NSS database used by Chrome/Brave. It is not supported on WSL.
 

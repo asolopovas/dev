@@ -28,6 +28,10 @@ func (a *App) rebuildWebConfiguration(ctx context.Context) error {
 			}
 		}
 	}
+	values := a.Config.ResolvedValues()
+	if err := a.generateHostCertificate(ctx, values.Hosts.PhpMyAdmin); err != nil {
+		return err
+	}
 	if err := a.writePhpMyAdminConfiguration(registry.HTTPS); err != nil {
 		return err
 	}
@@ -39,20 +43,12 @@ func (a *App) rebuildWebConfiguration(ctx context.Context) error {
 			fmt.Fprintf(a.Err, "Skipping invalid host entry: %s\n", host.Name)
 		}
 	}
-	values := a.Config.ResolvedValues()
 	allHosts := []string{values.Hosts.PhpMyAdmin}
 	for _, host := range validHosts {
 		allHosts = append(allHosts, host.Name)
 	}
 	if err := a.addHostRedirects(ctx, allHosts); err != nil {
 		return err
-	}
-	if registry.HTTPS {
-		if _, ok := registry.Host(values.Hosts.PhpMyAdmin); !ok {
-			if err := a.generateHostCertificate(ctx, values.Hosts.PhpMyAdmin); err != nil {
-				return err
-			}
-		}
 	}
 	fmt.Fprintf(a.Out, "Rebuilding web configuration: %d hosts\n", len(validHosts))
 	if err := a.writeComposeAliases(validHosts); err != nil {
@@ -106,14 +102,14 @@ func phpMyAdminHTTPSBlock(values AppValues, https bool) string {
 	if https {
 		return fmt.Sprintf("\nhttps://%s {\n    tls /etc/caddy/ssl/%s.crt /etc/caddy/ssl/%s.key\n    root * %s/html\n    encode gzip\n\n    file_server\n\n    php_fastcgi %s:9000\n}\n", values.Hosts.PhpMyAdmin, values.Hosts.PhpMyAdmin, values.Hosts.PhpMyAdmin, values.Hosts.ContainerWebDir, values.Services.PhpMyAdmin)
 	}
-	return fmt.Sprintf("\nhttps://%s {\n    tls internal\n    redir http://%s{uri}\n}\n", values.Hosts.PhpMyAdmin, values.Hosts.PhpMyAdmin)
+	return fmt.Sprintf("\nhttps://%s {\n    tls /etc/caddy/ssl/%s.crt /etc/caddy/ssl/%s.key\n    redir http://%s{uri}\n}\n", values.Hosts.PhpMyAdmin, values.Hosts.PhpMyAdmin, values.Hosts.PhpMyAdmin, values.Hosts.PhpMyAdmin)
 }
 
 func hostHTTPSBlock(hostName string, serveRoot string, https bool) string {
 	if https {
 		return fmt.Sprintf("\nhttps://%s {\n    tls /etc/caddy/ssl/%s.crt /etc/caddy/ssl/%s.key\n    root * %s\n    import /etc/caddy/cors.conf\n\n    php_server\n}\n", hostName, hostName, hostName, serveRoot)
 	}
-	return fmt.Sprintf("\nhttps://%s {\n    tls internal\n    import /etc/caddy/cors.conf\n\n    redir http://%s{uri}\n}\n", hostName, hostName)
+	return fmt.Sprintf("\nhttps://%s {\n    tls /etc/caddy/ssl/%s.crt /etc/caddy/ssl/%s.key\n    import /etc/caddy/cors.conf\n\n    redir http://%s{uri}\n}\n", hostName, hostName, hostName, hostName)
 }
 
 func (a *App) writeSiteConfiguration(ctx context.Context, host HostEntry, https bool) error {
@@ -137,10 +133,8 @@ func (a *App) writeSiteConfiguration(ctx context.Context, host HostEntry, https 
 			return err
 		}
 	}
-	if https {
-		if err := a.generateHostCertificate(ctx, host.Name); err != nil {
-			return err
-		}
+	if err := a.generateHostCertificate(ctx, host.Name); err != nil {
+		return err
 	}
 	if siteType.Laravel() {
 		serveRoot = filepath.Join(serveRoot, "public")

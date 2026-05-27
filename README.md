@@ -17,7 +17,7 @@ Docker-based PHP development environment for local WordPress and Laravel work. T
 
 Required: Go, Docker, Docker Compose, Bash, `curl`, and `tar`.
 
-Recommended: Fish for completions and `bats-core` for integration tests. `openssl` is needed only when HTTPS certificates are enabled or generated manually.
+Recommended: Fish for completions and `bats-core` for integration tests. `openssl` is needed for local redirect certificates and HTTPS certificates.
 
 Laravel scaffolding also expects `composer` on the host.
 
@@ -36,7 +36,7 @@ web new-host example.test -t wp
 
 Open `http://example.test`.
 
-HTTPS is disabled by default. To enable generated local certificates, set `"https": true` in `web-hosts.json`, run `web build-webconf`, then run `web import-rootca` once and restart the browser.
+HTTPS is disabled by default. In HTTP mode, `https://<host>` redirects back to `http://<host>` with local redirect certificates. If the browser does not trust the local CA yet, run `web import-rootca` once and restart the browser. To serve sites over HTTPS, set `"https": true` in `web-hosts.json` and run `web build-webconf`.
 
 `make install` builds the Go CLI and installs it as `/usr/local/bin/web`. When elevated permissions are needed it prompts through terminal `sudo` first, which works in WSL terminals, then falls back to non-interactive sudo/askpass. Without installation, replace `web` with `go run ./cmd/web`. The default paths assume the checkout lives at `$HOME/www/dev` and projects live under `$HOME/www`.
 
@@ -53,7 +53,7 @@ HTTPS is disabled by default. To enable generated local certificates, set `"http
 | `web log <service>` | Follow service logs |
 | `web new-host [host] [-t wp\|laravel]` | Create a WordPress or Laravel site |
 | `web remove-host [host]` | Remove a site, database, certs, and host mapping |
-| `web build-webconf` | Regenerate generated Caddy, optional SSL, cron, and alias files |
+| `web build-webconf` | Regenerate generated Caddy, SSL redirect certificates, cron, and alias files |
 | `web bash` / `web fish` | Open a shell in `franken_php` |
 | `web mysql` | Open MariaDB as root |
 | `web db-backup` / `web db-restore` | Dump or restore all databases |

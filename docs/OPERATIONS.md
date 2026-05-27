@@ -4,7 +4,7 @@ Use this to install, run, and maintain the local development stack.
 
 ## Install
 
-Install requires Go, Docker, Docker Compose, Bash, `curl`, and `tar`. `openssl` is needed only for local certificate generation.
+Install requires Go, Docker, Docker Compose, Bash, `curl`, `tar`, and `openssl` for local redirect and HTTPS certificates.
 
 ```sh
 mkdir -p "$HOME/www"
@@ -49,7 +49,7 @@ The CLI defaults to `SCRIPT_DIR=$HOME/www/dev` and `WEB_ROOT=$HOME/www` unless t
 }
 ```
 
-Set `"https": true` only when you want generated local certificates and HTTPS site blocks.
+Set `"https": true` only when you want HTTPS site blocks. HTTP mode still creates local certificates for redirect-only HTTPS blocks.
 
 ## First run
 
@@ -122,7 +122,7 @@ Regenerate all generated runtime files:
 web build-webconf
 ```
 
-`build-webconf` reads `web-hosts.json`, adds local host mappings, creates missing certificates only when `"https": true`, writes Caddy site files, writes Docker network aliases to `templates.yml`, writes WordPress cron lines to `crontab`, creates per-site VS Code launch configs, creates missing databases, and restarts `franken_php`.
+`build-webconf` reads `web-hosts.json`, adds local host mappings, creates missing certificates for redirect-only HTTPS blocks or full HTTPS site blocks, writes Caddy site files, writes Docker network aliases to `templates.yml`, writes WordPress cron lines to `crontab`, creates per-site VS Code launch configs, creates missing databases, and restarts `franken_php`.
 
 ## Scaffolding behavior
 
@@ -132,7 +132,7 @@ Laravel scaffolding runs `composer create-project --quiet --prefer-dist laravel/
 
 ## SSL
 
-HTTPS is off by default. In HTTP mode, generated Caddy config redirects `https://<host>` back to `http://<host>` and does not create project certificate files.
+HTTPS is off by default. In HTTP mode, generated Caddy config redirects `https://<host>` back to `http://<host>` using local redirect certificates and serves the site from HTTP. Browsers must trust the local root CA before they can follow an HTTPS redirect without a certificate warning.
 
 Enable generated certificates globally:
 

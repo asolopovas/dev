@@ -36,7 +36,7 @@ func TestSSLExtFile(t *testing.T) {
 	}
 }
 
-func TestWriteSiteConfigurationSkipsCertificateGenerationWhenHTTPSDisabled(t *testing.T) {
+func TestWriteSiteConfigurationUsesRedirectCertificateWhenHTTPSDisabled(t *testing.T) {
 	dir := t.TempDir()
 	cfg := siteConfigTestConfig(t, dir)
 	runner := &workflowRunner{}
@@ -44,23 +44,27 @@ func TestWriteSiteConfigurationSkipsCertificateGenerationWhenHTTPSDisabled(t *te
 	if err := app.writeSiteConfiguration(context.Background(), HostEntry{Name: "plain.test", Type: "laravel", DB: "plain_db"}, false); err != nil {
 		t.Fatal(err)
 	}
+	generated := false
 	for _, output := range runner.outputs {
 		if strings.HasPrefix(output, "openssl ") {
-			t.Fatalf("unexpected certificate generation: %#v", runner.outputs)
+			generated = true
 		}
+	}
+	if !generated {
+		t.Fatalf("expected redirect certificate generation: %#v", runner.outputs)
 	}
 	data, err := os.ReadFile(filepath.Join(cfg.BackendSitesDir, "plain.test.conf"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	content := string(data)
-	for _, want := range []string{"tls internal", "redir http://plain.test{uri}"} {
+	for _, want := range []string{"tls /etc/caddy/ssl/plain.test.crt /etc/caddy/ssl/plain.test.key", "redir http://plain.test{uri}"} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("config missing %q\n%s", want, content)
 		}
 	}
-	if strings.Contains(content, "/etc/caddy/ssl/plain.test") {
-		t.Fatalf("http mode should not reference generated certificate files\n%s", content)
+	if strings.Contains(content, "tls internal") {
+		t.Fatalf("http mode should use project certificates for redirect\n%s", content)
 	}
 }
 
