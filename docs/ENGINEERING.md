@@ -5,6 +5,7 @@ Use this when changing code, tests, Docker files, generated-file behavior, or ag
 ## Validation commands
 
 ```sh
+make check
 make lint
 make test
 make test-integration
@@ -13,6 +14,7 @@ make test-all
 
 | Command | Scope |
 |---|---|
+| `make check` | Lint plus all tests; integration tests run only when services are up |
 | `make lint` | Go formatting, `go vet`, and shellcheck on shell scripts |
 | `make test` | Go unit and E2E-style tests |
 | `make test-integration` | Bats integration tests in `tests/integration/`; requires running services |

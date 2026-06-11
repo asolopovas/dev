@@ -1,7 +1,7 @@
 IMAGE   ?= asolopovas/franken-php
 TAG     ?= latest
 
-.PHONY: help build push pull install install-go test test-go test-integration test-all lint
+.PHONY: help build push pull install install-go test test-go test-integration test-all lint check
 
 help:
 	@printf "\033[1mUsage:\033[0m make \033[36m<target>\033[0m\n\n"
@@ -33,6 +33,8 @@ test-integration: ## Run integration tests (requires running services)
 
 test-all: ## Run all tests (integration if services are up)
 	@bash tests.sh
+
+check: lint test-all ## Run lint and all tests locally (integration if services are up)
 
 lint: ## Check Go formatting, vet, and shell scripts
 	@[ -z "$$(gofmt -l cmd internal)" ] || { gofmt -l cmd internal; exit 1; }
