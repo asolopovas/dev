@@ -34,5 +34,7 @@ test-integration: ## Run integration tests (requires running services)
 test-all: ## Run all tests (integration if services are up)
 	@bash tests.sh
 
-lint: ## Check Go formatting
-	@[ -z "$$(gofmt -l cmd internal)" ]
+lint: ## Check Go formatting, vet, and shell scripts
+	@[ -z "$$(gofmt -l cmd internal)" ] || { gofmt -l cmd internal; exit 1; }
+	@go vet ./...
+	@shellcheck tests.sh franken_php/entrypoint.sh

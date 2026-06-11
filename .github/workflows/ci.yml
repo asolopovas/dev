@@ -12,10 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq bats jq shellcheck
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
 
-      - name: ShellCheck
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+
+      - name: Lint
         run: make lint
 
       - name: Unit tests

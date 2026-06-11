@@ -13,7 +13,7 @@ make test-all
 
 | Command | Scope |
 |---|---|
-| `make lint` | Go formatting check |
+| `make lint` | Go formatting, `go vet`, and shellcheck on shell scripts |
 | `make test` | Go unit and E2E-style tests |
 | `make test-integration` | Bats integration tests in `tests/integration/`; requires running services |
 | `make test-all` | Runs Go tests and integration tests only when `franken_php` is up |
