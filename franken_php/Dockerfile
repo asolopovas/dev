@@ -46,6 +46,8 @@ ARG WORKDIR=/var/www
 ARG SUPERCRONIC_VERSION=v0.2.38
 ARG FD_VERSION=10.3.0
 ARG FZF_VERSION=0.67.0
+ARG NODE_VERSION=24.16.0
+ARG WKHTMLTOX_VERSION=0.13.0-1
 
 COPY --from=builder /usr/local/bin/frankenphp    /usr/local/bin/frankenphp
 COPY --from=builder /usr/local/bin/php           /usr/local/bin/php
@@ -115,10 +117,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 RUN set -eux; \
     ARCH="$(dpkg --print-architecture)" \
-    && curl -fsSL "https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.bookworm_${ARCH}.deb" \
+    && curl -fsSL "https://github.com/asolopovas/wkhtmltopdf/releases/download/latest/wkhtmltox_${WKHTMLTOX_VERSION}.linux_${ARCH}.deb" \
         -o /tmp/wkhtmltox.deb \
-    && dpkg --force-depends -i /tmp/wkhtmltox.deb \
-    && rm -f /usr/local/bin/wkhtmltoimage /usr/local/lib/libwkhtmltox.so* \
+    && dpkg -i /tmp/wkhtmltox.deb \
     && curl -fsSL "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-${ARCH}" \
         -o /usr/local/bin/supercronic \
     && chmod 0755 /usr/local/bin/supercronic \
@@ -163,9 +164,8 @@ USER ${UID}:${GID}
 RUN set -eux; \
     mkdir -p "$HOME/.local/bin" && touch "$HOME/.env-vars" \
     && ARCH="$(dpkg --print-architecture)" \
-    && case "$ARCH" in amd64) NODE_ARCH=x64;; arm64) NODE_ARCH=arm64;; esac \
-    && NODE_VERSION=$(curl -fsSL https://resolve-node.now.sh/lts) \
-    && curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
+    && case "$ARCH" in amd64) NODE_ARCH=x64;; arm64) NODE_ARCH=arm64;; *) echo "unsupported arch: $ARCH" >&2; exit 1;; esac \
+    && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
         | tar -xJ --strip-components=1 -C "$HOME/.local" \
     && npm install -g npm@latest \
     && npm config set update-notifier false \
