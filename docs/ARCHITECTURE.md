@@ -39,7 +39,7 @@ web command
 | `mailpit` | Local SMTP sink and web UI |
 | `typesense` | Local search service using `typesense-data/` |
 
-`franken_php` is built from a multi-stage image. It copies FrankenPHP/PHP from `dunglas/frankenphp`, Composer from `composer:2`, installs PHP extensions and runtime libraries, adds Node.js, Bun, Fish, Supercronic, ripgrep, fd, fzf, and developer tooling, then runs as the configured non-root app user.
+`franken_php` is built from digest-pinned multi-stage images. It copies FrankenPHP/PHP, Composer, and Bun from pinned upstream stages; installs versioned PHP extensions and their generated runtime dependency set; and verifies checksums before installing downloaded tools. BuildKit emits provenance and SBOM attestations, and the final image runs as the configured non-root app user. The image currently targets `linux/amd64` because its wkhtmltox artifact is only published for that architecture.
 
 ## Host registry
 

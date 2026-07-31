@@ -1,20 +1,26 @@
 IMAGE   ?= asolopovas/franken-php
 TAG     ?= latest
 
-.PHONY: help build push pull install install-go test test-go test-integration test-all lint check
+.PHONY: help build push pull image-check image-scan install install-go test test-go test-integration test-all lint check
 
 help:
 	@printf "\033[1mUsage:\033[0m make \033[36m<target>\033[0m\n\n"
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 build: ## Build franken-php image
-	docker build -t $(IMAGE):$(TAG) ./franken_php
+	docker buildx build --load --provenance=mode=max --sbom=true -t $(IMAGE):$(TAG) ./franken_php
 
-push: build ## Build and push image to registry
-	docker push $(IMAGE):$(TAG)
+push: ## Build and push image to registry
+	docker buildx build --push --provenance=mode=max --sbom=true -t $(IMAGE):$(TAG) ./franken_php
 
 pull: ## Pull image from registry
 	docker pull $(IMAGE):$(TAG)
+
+image-check:
+	docker buildx build --check ./franken_php
+
+image-scan: build
+	docker scout cves --exit-code --only-fixed --only-severity critical,high $(IMAGE):$(TAG)
 
 install: install-go ## Install Go web CLI to /usr/local/bin/web
 
