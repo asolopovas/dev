@@ -1,4 +1,4 @@
-FROM ghcr.io/mlocati/php-extension-installer:2.11.1@sha256:bd9ea77afcbc8e55e58d55ca9a39153925367e972827d2f648c949fd0e44aaca AS php_extension_installer
+FROM ghcr.io/mlocati/php-extension-installer:2.11.12@sha256:b6d3fa381b9ba5cf051117c1c601d6a523b590e534bf3d56eb4fbe352949c138 AS php_extension_installer
 
 FROM composer:2.10.2@sha256:629d4ef35e75349d452851637d37a40ac33a09d6ac010139020603d79713d9bf AS composer
 
