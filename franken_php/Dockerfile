@@ -4,7 +4,7 @@ FROM composer:2.10.2@sha256:629d4ef35e75349d452851637d37a40ac33a09d6ac0101390206
 
 FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun
 
-FROM dunglas/frankenphp:1.12.6-php8.4-trixie@sha256:58c4cdad00b1fe45b044a526aacd385d38228b033b05d0aca9becd8a4effc3bc AS php
+FROM dunglas/frankenphp:1.12.7-php8.4-trixie@sha256:ed52b8e414756b0cd12144f16cedbf38bd1c5ede24c9837a8d4a80a4e946c86a AS php
 
 COPY --from=php_extension_installer /usr/bin/install-php-extensions /usr/local/bin/
 
