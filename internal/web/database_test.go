@@ -3,7 +3,7 @@ package web
 import "testing"
 
 func TestValidateDatabaseIdentifier(t *testing.T) {
-	valid := []string{"example_wp", "3oak_wp", "_legacy"}
+	valid := []string{"example_wp", "7example_wp", "_legacy"}
 	invalid := []string{"", "bad-name", "bad.name", "bad name"}
 	for _, name := range valid {
 		if err := validateDatabaseIdentifier(name); err != nil {

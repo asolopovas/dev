@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,8 +11,9 @@ import (
 )
 
 type workflowRunner struct {
-	runs    []string
-	outputs []string
+	runs      []string
+	outputs   []string
+	outputErr error
 }
 
 func (r *workflowRunner) Run(ctx context.Context, name string, args ...string) error {
@@ -21,7 +23,7 @@ func (r *workflowRunner) Run(ctx context.Context, name string, args ...string) e
 
 func (r *workflowRunner) Output(ctx context.Context, name string, args ...string) ([]byte, error) {
 	r.outputs = append(r.outputs, name+" "+strings.Join(args, " "))
-	return []byte("ok"), nil
+	return []byte("ok"), r.outputErr
 }
 
 func (r *workflowRunner) Pipe(ctx context.Context, input []byte, name string, args ...string) ([]byte, error) {
@@ -102,5 +104,30 @@ func TestNewHostRejectsConfiguredHostBeforeScaffold(t *testing.T) {
 		if strings.Contains(run, "composer") {
 			t.Fatalf("unexpected scaffold command: %#v", runner.runs)
 		}
+	}
+}
+
+func TestNewHostDockerPreconditionDoesNotCreateState(t *testing.T) {
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "docker"), nil, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+	cfg := testHostWorkflowConfig(dir)
+	runner := &workflowRunner{outputErr: errors.New("unavailable")}
+	app := &App{Config: cfg, Runner: runner, Out: &bytes.Buffer{}, Err: &bytes.Buffer{}, In: strings.NewReader("")}
+	err := app.newHost(context.Background(), "pending.test", "wp", "")
+	if err == nil || !strings.Contains(err.Error(), "docker daemon is not running") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(cfg.HostsJSON); !os.IsNotExist(err) {
+		t.Fatalf("registry should not exist: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.WebRoot, "pending.test")); !os.IsNotExist(err) {
+		t.Fatalf("project should not exist: %v", err)
 	}
 }
